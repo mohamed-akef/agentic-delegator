@@ -1,0 +1,28 @@
+// core/presenter/templ/pages/dashboard.templ
+package pages
+
+import (
+    "agentic-delegator/core/domain"
+    "agentic-delegator/core/presenter/templ/layouts"
+)
+
+templ Dashboard(jobs []*domain.Job) {
+    @layouts.Shell("Dashboard") {
+        <h1>Dashboard</h1>
+        <p><a href="/settings">Settings</a></p>
+        <h2>Recent jobs</h2>
+        if len(jobs) == 0 {
+            <p>No jobs yet. Use the <code>/delegate</code> skill in Claude Code to start one.</p>
+        } else {
+            <ul>
+                for _, j := range jobs {
+                    <li>
+                        <a href={ templ.SafeURL("/jobs/" + string(j.ID)) }>{ string(j.ID) }</a>
+                        <span class={ "badge", "b-" + string(j.Status) }>{ string(j.Status) }</span>
+                        — { j.Repo } · { j.WorkBranch }
+                    </li>
+                }
+            </ul>
+        }
+    }
+}

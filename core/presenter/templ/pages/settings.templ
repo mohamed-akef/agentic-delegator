@@ -1,0 +1,37 @@
+// core/presenter/templ/pages/settings.templ
+package pages
+
+import (
+    "agentic-delegator/core/domain"
+    "agentic-delegator/core/presenter/templ/layouts"
+)
+
+templ Settings(keys []*domain.APIKey, hasAnthropic bool) {
+    @layouts.Shell("Settings") {
+        <h1>Settings</h1>
+
+        <h2>Anthropic API key</h2>
+        if hasAnthropic {
+            <p>Anthropic API key is configured. <small>Update by re-submitting below.</small></p>
+        } else {
+            <p><strong>Not yet set.</strong> Paste your Anthropic API key:</p>
+        }
+        <form method="POST" action="/settings/anthropic" hx-post="/settings/anthropic" hx-swap="none">
+            <label>API key: <input name="api_key" type="password" required /></label>
+            <button type="submit">Save</button>
+        </form>
+
+        <h2>Personal API keys (for the skill)</h2>
+        <form method="POST" action="/settings/api-keys">
+            <label>Name: <input name="name" required /></label>
+            <button type="submit">Mint</button>
+        </form>
+        if len(keys) > 0 {
+            <ul>
+                for _, k := range keys {
+                    <li><code>{ k.Prefix }…</code> — { k.Name }</li>
+                }
+            </ul>
+        }
+    }
+}

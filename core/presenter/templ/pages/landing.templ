@@ -1,0 +1,12 @@
+// core/presenter/templ/pages/landing.templ
+package pages
+
+import "agentic-delegator/core/presenter/templ/layouts"
+
+templ Landing() {
+    @layouts.Shell("Welcome") {
+        <h1>agentic-delegator</h1>
+        <p>Self-hosted background coding agent for Claude Code.</p>
+        <p>Go to <a href="/dashboard">/dashboard</a> to start.</p>
+    }
+}
