@@ -34,6 +34,14 @@ components:
     in: core/adapter/http
   adapter_http_gen:
     in: core/adapter/http/gen
+  runtime:
+    in: core/runtime/**
+  runtime_selfhost:
+    in: core/runtime/selfhost/**
+  presenter:
+    in: core/presenter/**
+  config:
+    in: core/config/**
   cmd:
     in: cmd/**
 
@@ -87,6 +95,19 @@ deps:
     anyVendorDeps: true
   adapter_http:
     mayDependOn: [domain, ports, usecase, adapter_http_gen]
+    anyVendorDeps: true
+  runtime:
+    mayDependOn: [domain, ports]
+    anyVendorDeps: true
+  runtime_selfhost:
+    mayDependOn: [domain, ports, runtime, usecase]
+    anyVendorDeps: true
+  presenter:
+    mayDependOn: [domain]
+    anyVendorDeps: true
+  config:
+    mayDependOn: []
+    anyProjectDeps: false
     anyVendorDeps: true
   # cmd is the composition root — may depend on all adapters and use cases
   cmd:
