@@ -20,7 +20,7 @@ func TestDockerRunner_helloWorldExitsZero(t *testing.T) {
 	logPath := filepath.Join(tmpDir, "j.log")
 
 	r := docker.New(docker.Config{
-		Image:        "alpine:3.20",
+		Image:         "alpine:3.20",
 		EntryOverride: []string{"sh", "-c", `echo "hello $JOB_ID"; mkdir -p /workspace && echo "https://example/pr/1" > /workspace/.pr-url; exit 0`},
 		CPUs:          "0.5",
 		MemoryMB:      256,

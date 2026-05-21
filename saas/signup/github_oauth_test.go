@@ -21,7 +21,9 @@ type fakeIdentitiesRepo struct {
 	byID map[int64]*store.GitHubIdentity
 }
 
-func newFakeIdentities() *fakeIdentitiesRepo { return &fakeIdentitiesRepo{byID: map[int64]*store.GitHubIdentity{}} }
+func newFakeIdentities() *fakeIdentitiesRepo {
+	return &fakeIdentitiesRepo{byID: map[int64]*store.GitHubIdentity{}}
+}
 func (f *fakeIdentitiesRepo) Upsert(_ context.Context, id store.GitHubIdentity) error {
 	cpy := id
 	f.byID[id.GitHubID] = &cpy

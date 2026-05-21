@@ -20,7 +20,7 @@ import (
 //   - storing the admin's GitHub PAT (encrypted, in user_secrets-equivalent)
 //   - holding the bcrypt hash of the admin API key for token compare
 type AdminBootstrap struct {
-	users        UsersRepo  // small interface — see below
+	users        UsersRepo // small interface — see below
 	clock        ports.Clock
 	adminKeyHash []byte // bcrypt hash; nil until init has set the key
 	// PATStore is the place where the admin's GitHub PAT lives.

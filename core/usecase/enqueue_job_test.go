@@ -13,12 +13,12 @@ import (
 )
 
 type enqueueDeps struct {
-	clock   *testutil.FakeClock
-	jobs    *testutil.FakeJobsRepo
-	runner  *testutil.FakeRunnerService
-	repoCp  *testutil.FakeRepoCredsProvider
-	anth    *testutil.FakeAnthropicCredsProvider
-	idgen   *testutil.FakeIDGenerator
+	clock  *testutil.FakeClock
+	jobs   *testutil.FakeJobsRepo
+	runner *testutil.FakeRunnerService
+	repoCp *testutil.FakeRepoCredsProvider
+	anth   *testutil.FakeAnthropicCredsProvider
+	idgen  *testutil.FakeIDGenerator
 }
 
 func newEnqueueUC(t *testing.T) (*usecase.EnqueueJob, *enqueueDeps) {
