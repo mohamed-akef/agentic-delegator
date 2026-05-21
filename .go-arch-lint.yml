@@ -1,14 +1,13 @@
 # .go-arch-lint.yml — enforces Clean Architecture dependency rule.
-# See https://github.com/fe3dback/go-arch-lint for syntax (v1.15+).
 
 version: 3
 workdir: .
 allow:
-  depOnAnyVendor: true   # third-party deps (uuid, bun, …) are evaluated by component
+  depOnAnyVendor: true
   deepScan: true
 
 excludeFiles:
-  - "^.*_test\\.go$"     # Go external-test-package imports its own package; ignore tests
+  - "^.*_test\\.go$"
 
 components:
   domain:
@@ -19,11 +18,25 @@ components:
     in: core/usecase
   testutil:
     in: core/testutil/**
+  adapter_clock:
+    in: core/adapter/clock/**
+  adapter_idgen:
+    in: core/adapter/idgen/**
+  adapter_crypto:
+    in: core/adapter/crypto/**
+  adapter_webhook:
+    in: core/adapter/webhook/**
+  adapter_postgres:
+    in: core/adapter/postgres/**
+  adapter_docker:
+    in: core/adapter/docker/**
+  adapter_http:
+    in: core/adapter/http/**
 
 deps:
   domain:
-    anyProjectDeps: false  # NO repo-internal deps allowed
-    anyVendorDeps: true    # stdlib + benign third-party allowed
+    anyProjectDeps: false
+    anyVendorDeps: true
 
   ports:
     mayDependOn:
@@ -40,4 +53,30 @@ deps:
     mayDependOn:
       - domain
       - ports
+    anyVendorDeps: true
+
+  # All adapters may use domain + ports + (eventually) usecase. They may NOT
+  # depend on other adapters — that's the SRP boundary; composition happens
+  # in cmd/*.
+  adapter_clock:
+    mayDependOn: [domain, ports]
+    anyVendorDeps: true
+  adapter_idgen:
+    mayDependOn: [domain, ports]
+    anyVendorDeps: true
+  adapter_crypto:
+    mayDependOn: [domain, ports]
+    anyVendorDeps: true
+  adapter_webhook:
+    mayDependOn: [domain, ports]
+    anyVendorDeps: true
+  adapter_postgres:
+    mayDependOn: [domain, ports]
+    anyVendorDeps: true
+  adapter_docker:
+    mayDependOn: [domain, ports]
+    anyVendorDeps: true
+  # http adapter may also call use cases (it's the inbound side)
+  adapter_http:
+    mayDependOn: [domain, ports, usecase]
     anyVendorDeps: true
