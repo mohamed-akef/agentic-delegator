@@ -7,6 +7,9 @@ allow:
   depOnAnyVendor: true   # third-party deps (uuid, bun, …) are evaluated by component
   deepScan: true
 
+excludeFiles:
+  - "^.*_test\\.go$"     # Go external-test-package imports its own package; ignore tests
+
 components:
   domain:
     in: core/domain/**
