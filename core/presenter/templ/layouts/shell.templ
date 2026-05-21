@@ -1,0 +1,31 @@
+// core/presenter/templ/layouts/shell.templ
+package layouts
+
+templ Shell(title string) {
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>{ title } — agentic-delegator</title>
+        <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+        <style>
+            body { font-family: ui-sans-serif, -apple-system, sans-serif; max-width: 920px; margin: 2em auto; padding: 0 1em; color: #222; }
+            h1 { font-size: 1.4em; margin: 0 0 0.6em; }
+            h2 { font-size: 1.1em; margin: 1em 0 0.3em; }
+            pre.log { background: #111; color: #e7e7e7; padding: 1em; border-radius: 6px; max-height: 50vh; overflow: auto; font-size: 12px; }
+            .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; text-transform: uppercase; }
+            .b-queued    { background: #eef; color: #44a; }
+            .b-running   { background: #eea; color: #a60; }
+            .b-succeeded { background: #efe; color: #060; }
+            .b-failed    { background: #fee; color: #a00; }
+            .b-cancelled { background: #eee; color: #555; }
+            a { color: #44a; }
+            label { display: block; margin: 0.5em 0; }
+            input, button { font: inherit; padding: 0.3em 0.6em; }
+        </style>
+    </head>
+    <body>
+        { children... }
+    </body>
+    </html>
+}

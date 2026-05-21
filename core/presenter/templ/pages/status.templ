@@ -1,0 +1,38 @@
+// core/presenter/templ/pages/status.templ
+package pages
+
+import (
+    "agentic-delegator/core/domain"
+    "agentic-delegator/core/presenter/templ/layouts"
+)
+
+templ Status(j *domain.Job, logTail string) {
+    @layouts.Shell("Job " + string(j.ID)) {
+        <h1>Job <code>{ string(j.ID) }</code></h1>
+        <p>
+            <span class={ "badge", "b-" + string(j.Status) }>{ string(j.Status) }</span>
+            on <strong>{ j.Repo }</strong> · branch <code>{ j.WorkBranch }</code> (from { j.BaseBranch })
+        </p>
+        if j.PRURL != "" {
+            <p>PR: <a href={ templ.SafeURL(j.PRURL) }>{ j.PRURL }</a></p>
+        }
+        if j.Error != "" {
+            <p>Error: <code>{ j.Error }</code></p>
+        }
+        <h2>Logs <small>(refreshes every 2s while running)</small></h2>
+        <pre class="log"
+             hx-get={ "/jobs/" + string(j.ID) + "/log" }
+             hx-trigger={ logRefreshTrigger(j) }
+             hx-swap="innerHTML">
+            { logTail }
+        </pre>
+    }
+}
+
+func logRefreshTrigger(j *domain.Job) string {
+    // Only auto-poll while running. Terminal states freeze the log view.
+    if j.Status == domain.JobStatusRunning || j.Status == domain.JobStatusQueued {
+        return "every 2s"
+    }
+    return ""
+}
