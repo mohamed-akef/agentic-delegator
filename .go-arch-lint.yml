@@ -28,6 +28,8 @@ components:
     in: core/adapter/webhook/**
   adapter_postgres:
     in: core/adapter/postgres/**
+  adapter_postgres_selfhost:
+    in: core/adapter/postgres/selfhost/**
   adapter_docker:
     in: core/adapter/docker/**
   adapter_http:
@@ -85,6 +87,9 @@ deps:
   adapter_postgres:
     mayDependOn: [domain, ports]
     anyVendorDeps: true
+  adapter_postgres_selfhost:
+    mayDependOn: [domain, ports, adapter_postgres, adapter_crypto, runtime_selfhost]
+    anyVendorDeps: true
   adapter_docker:
     mayDependOn: [domain, ports]
     anyVendorDeps: true
@@ -111,5 +116,5 @@ deps:
     anyVendorDeps: true
   # cmd is the composition root — may depend on all adapters and use cases
   cmd:
-    mayDependOn: [domain, ports, usecase, adapter_clock, adapter_idgen, adapter_crypto, adapter_webhook, adapter_postgres, adapter_docker, adapter_http, adapter_http_gen]
+    mayDependOn: [domain, ports, usecase, adapter_clock, adapter_idgen, adapter_crypto, adapter_webhook, adapter_postgres, adapter_postgres_selfhost, adapter_docker, adapter_http, adapter_http_gen, runtime_selfhost, config]
     anyVendorDeps: true
