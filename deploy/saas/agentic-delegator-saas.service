@@ -1,0 +1,25 @@
+# deploy/saas/agentic-delegator-saas.service
+[Unit]
+Description=Agentic Delegator (SaaS)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=agentic-delegator
+Group=agentic-delegator
+EnvironmentFile=/etc/agentic-delegator/env
+ExecStart=/usr/local/bin/agentic-delegator-saas serve
+Restart=on-failure
+RestartSec=5
+StateDirectory=agentic-delegator
+LogsDirectory=agentic-delegator
+WorkingDirectory=/var/lib/agentic-delegator
+
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
