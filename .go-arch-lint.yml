@@ -1,0 +1,40 @@
+# .go-arch-lint.yml — enforces Clean Architecture dependency rule.
+# See https://github.com/fe3dback/go-arch-lint for syntax (v1.15+).
+
+version: 3
+workdir: .
+allow:
+  depOnAnyVendor: true   # third-party deps (uuid, bun, …) are evaluated by component
+  deepScan: true
+
+components:
+  domain:
+    in: core/domain/**
+  ports:
+    in: core/usecase/ports/**
+  usecase:
+    in: core/usecase
+  testutil:
+    in: core/testutil/**
+
+deps:
+  domain:
+    anyProjectDeps: false  # NO repo-internal deps allowed
+    anyVendorDeps: true    # stdlib + benign third-party allowed
+
+  ports:
+    mayDependOn:
+      - domain
+    anyVendorDeps: true
+
+  usecase:
+    mayDependOn:
+      - domain
+      - ports
+    anyVendorDeps: true
+
+  testutil:
+    mayDependOn:
+      - domain
+      - ports
+    anyVendorDeps: true

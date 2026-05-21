@@ -152,7 +152,7 @@ lint:
 	$(GO) vet ./...
 
 arch-check:
-	$(GO) run github.com/fe3dback/go-arch-lint@v1.11.4 check --project-path .
+	$(GO) run github.com/fe3dback/go-arch-lint@v1.15.0 check --project-path .
 
 generate:
 	@echo "(plan 02 will wire templ + oapi-codegen here)"
