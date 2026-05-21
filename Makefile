@@ -22,7 +22,7 @@ arch-check:
 	$(GO) run github.com/fe3dback/go-arch-lint@v1.15.0 check --project-path .
 
 generate:
-	go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.4.1 -config api/codegen.yaml api/openapi.yaml
+	go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.0 -config api/codegen.yaml api/openapi.yaml
 
 dev-db-up:
 	docker compose -f docker-compose.dev.yml up -d

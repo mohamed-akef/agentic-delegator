@@ -1,0 +1,8 @@
+package: gen
+output: core/adapter/http/gen/server.go
+generate:
+  chi-server: true
+  models: true
+  embedded-spec: false
+output-options:
+  user-templates: {}
