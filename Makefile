@@ -23,6 +23,7 @@ arch-check:
 
 generate:
 	go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.0 -config api/codegen.yaml api/openapi.yaml
+	go run github.com/a-h/templ/cmd/templ@v0.3.819 generate
 
 dev-db-up:
 	docker compose -f docker-compose.dev.yml up -d
