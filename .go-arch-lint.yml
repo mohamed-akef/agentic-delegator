@@ -31,7 +31,9 @@ components:
   adapter_docker:
     in: core/adapter/docker/**
   adapter_http:
-    in: core/adapter/http/**
+    in: core/adapter/http
+  adapter_http_gen:
+    in: core/adapter/http/gen
   cmd:
     in: cmd/**
 
@@ -79,10 +81,14 @@ deps:
     mayDependOn: [domain, ports]
     anyVendorDeps: true
   # http adapter may also call use cases (it's the inbound side)
+  # adapter_http_gen is the oapi-codegen output; it receives injections from adapter_http
+  adapter_http_gen:
+    anyProjectDeps: true
+    anyVendorDeps: true
   adapter_http:
-    mayDependOn: [domain, ports, usecase]
+    mayDependOn: [domain, ports, usecase, adapter_http_gen]
     anyVendorDeps: true
   # cmd is the composition root — may depend on all adapters and use cases
   cmd:
-    mayDependOn: [domain, ports, usecase, adapter_clock, adapter_idgen, adapter_crypto, adapter_webhook, adapter_postgres, adapter_docker, adapter_http]
+    mayDependOn: [domain, ports, usecase, adapter_clock, adapter_idgen, adapter_crypto, adapter_webhook, adapter_postgres, adapter_docker, adapter_http, adapter_http_gen]
     anyVendorDeps: true
