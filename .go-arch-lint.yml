@@ -32,6 +32,8 @@ components:
     in: core/adapter/docker/**
   adapter_http:
     in: core/adapter/http/**
+  cmd:
+    in: cmd/**
 
 deps:
   domain:
@@ -79,4 +81,8 @@ deps:
   # http adapter may also call use cases (it's the inbound side)
   adapter_http:
     mayDependOn: [domain, ports, usecase]
+    anyVendorDeps: true
+  # cmd is the composition root — may depend on all adapters and use cases
+  cmd:
+    mayDependOn: [domain, ports, usecase, adapter_clock, adapter_idgen, adapter_crypto, adapter_webhook, adapter_postgres, adapter_docker, adapter_http]
     anyVendorDeps: true
