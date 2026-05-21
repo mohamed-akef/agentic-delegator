@@ -1,4 +1,4 @@
-.PHONY: build build-saas test test-race lint arch-check generate dev migrate migrate-saas clean
+.PHONY: build build-saas test test-race lint arch-check generate dev migrate migrate-saas dev-db-up dev-db-down test-integration clean
 
 GO := go
 GOFLAGS :=
@@ -22,16 +22,28 @@ arch-check:
 	$(GO) run github.com/fe3dback/go-arch-lint@v1.15.0 check --project-path .
 
 generate:
-	@echo "(plan 02 will wire templ + oapi-codegen here)"
+	go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.4.1 -config api/codegen.yaml api/openapi.yaml
+
+dev-db-up:
+	docker compose -f docker-compose.dev.yml up -d
+	@echo "waiting for postgres..."
+	@until docker exec agentic-delegator-postgres-dev pg_isready -U delegator >/dev/null 2>&1; do sleep 1; done
+	@echo "postgres ready"
+
+dev-db-down:
+	docker compose -f docker-compose.dev.yml down
 
 dev:
-	@echo "(plan 03 will wire air here)"
+	@echo "Plan 03 will wire Air here."
 
 migrate:
-	@echo "(plan 02 will wire bun migrate here)"
+	go run ./cmd/agentic-delegator/migrate up
 
 migrate-saas:
-	@echo "(plan 02 will wire saas bun migrate here)"
+	@echo "Plan 04 will wire SaaS-only migrations here."
+
+test-integration:
+	$(GO) test -tags=integration ./...
 
 clean:
 	rm -rf bin/ tmp/
