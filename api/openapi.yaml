@@ -1,0 +1,9 @@
+openapi: 3.1.0
+info:
+  title: agentic-delegator
+  version: 0.1.0
+  description: Spec-driven background coding agent service. Endpoints fleshed out in plan 02.
+servers:
+  - url: http://localhost:8787
+paths: {}
+components: {}
