@@ -11,6 +11,8 @@
 # Build output
 /bin/
 /tmp/
+/agentic-delegator
+/agentic-delegator-saas
 
 # Test binary, built with `go test -c`
 *.test
