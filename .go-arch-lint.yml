@@ -46,6 +46,18 @@ components:
     in: core/config/**
   cmd:
     in: cmd/**
+  saas_root:
+    in: saas
+  saas_signup:
+    in: saas/signup/**
+  saas_ghapp:
+    in: saas/ghapp/**
+  saas_tenancy:
+    in: saas/tenancy/**
+  saas_store:
+    in: saas/store/**
+  saas_presenter:
+    in: saas/presenter/**
 
 deps:
   domain:
@@ -135,3 +147,22 @@ deps:
     anyProjectDeps: true
     anyVendorDeps: true
     deepScan: false
+  saas_root:
+    mayDependOn: [domain, ports, usecase, runtime, presenter, adapter_postgres, adapter_crypto, adapter_http, saas_signup, saas_ghapp, saas_tenancy, saas_store, saas_presenter]
+    anyVendorDeps: true
+    deepScan: false
+  saas_signup:
+    mayDependOn: [domain, ports, usecase, runtime, saas_store, saas_tenancy]
+    anyVendorDeps: true
+  saas_ghapp:
+    mayDependOn: [domain, ports, usecase, runtime, saas_store, adapter_crypto]
+    anyVendorDeps: true
+  saas_tenancy:
+    mayDependOn: [domain, ports, usecase, saas_store]
+    anyVendorDeps: true
+  saas_store:
+    mayDependOn: [domain, ports, adapter_postgres]
+    anyVendorDeps: true
+  saas_presenter:
+    mayDependOn: [domain, presenter]
+    anyVendorDeps: true
