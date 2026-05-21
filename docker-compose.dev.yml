@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: delegator
       POSTGRES_DB: delegator
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5433:5432"   # host 5433 → container 5432, to avoid conflict with other dev DBs
     volumes:
       - delegator-pgdata:/var/lib/postgresql/data
     healthcheck:

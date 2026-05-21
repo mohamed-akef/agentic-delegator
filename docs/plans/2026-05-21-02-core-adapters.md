@@ -1097,7 +1097,7 @@ func testDSN(t *testing.T) string {
 	t.Helper()
 	dsn := os.Getenv("DELEGATOR_TEST_DSN")
 	if dsn == "" {
-		dsn = "postgres://delegator:delegator@127.0.0.1:5432/delegator?sslmode=disable"
+		dsn = "postgres://delegator:delegator@127.0.0.1:5433/delegator?sslmode=disable"
 	}
 	return dsn
 }
@@ -1444,7 +1444,7 @@ func main() {
 		if len(args) > 0 {
 			*cmd = args[0]
 		}
-		fallback := "postgres://delegator:delegator@127.0.0.1:5432/delegator?sslmode=disable"
+		fallback := "postgres://delegator:delegator@127.0.0.1:5433/delegator?sslmode=disable"
 		fmt.Fprintln(os.Stderr, "DELEGATOR_DSN not set; falling back to "+fallback)
 		*dsn = fallback
 	}
