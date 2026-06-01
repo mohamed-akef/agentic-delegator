@@ -1,0 +1,36 @@
+# Normalize line endings: LF in the repo, LF on checkout everywhere.
+# Prevents spurious CRLF diffs when collaborators are on different OSes.
+
+* text=auto eol=lf
+
+# Source / config — always LF
+*.go        text eol=lf
+*.mod       text eol=lf
+*.sum       text eol=lf
+*.sh        text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.json      text eol=lf
+*.toml      text eol=lf
+*.md        text eol=lf
+*.txt       text eol=lf
+*.sql       text eol=lf
+Dockerfile  text eol=lf
+Makefile    text eol=lf
+
+# Windows-only scripts — keep CRLF
+*.ps1       text eol=crlf
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# Binary — never touch
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.pdf       binary
+*.zip       binary
+*.tar       binary
+*.gz        binary
+*.pem       binary

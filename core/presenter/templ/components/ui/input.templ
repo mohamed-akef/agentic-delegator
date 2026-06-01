@@ -1,0 +1,24 @@
+// core/presenter/templ/components/ui/input.templ
+package ui
+
+const inputClasses = "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+
+templ Input(name, inputType, placeholder string, required bool) {
+    if required {
+        <input name={ name } type={ inputType } placeholder={ placeholder } required class={ inputClasses } />
+    } else {
+        <input name={ name } type={ inputType } placeholder={ placeholder } class={ inputClasses } />
+    }
+}
+
+templ Label(forID string) {
+    <label for={ forID } class="text-sm font-medium leading-none">
+        { children... }
+    </label>
+}
+
+templ Field() {
+    <div class="space-y-2">
+        { children... }
+    </div>
+}

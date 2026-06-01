@@ -8,6 +8,7 @@ import (
 	chimw "github.com/go-chi/chi/v5/middleware"
 
 	"agentic-delegator/core/adapter/http/gen"
+	"agentic-delegator/core/presenter/static"
 )
 
 // EditionRouteMounter is the slice of the runtime.Edition interface the
@@ -34,6 +35,7 @@ func NewRouter(deps Deps) chi.Router {
 
 	// public (no auth)
 	r.Get("/", deps.Dashboard.Landing)
+	r.Handle("/static/*", nethttp.StripPrefix("/static/", static.Handler()))
 	// edition-specific routes (selfhost: /admin/setup; saas: /login, etc.)
 	if deps.Edition != nil {
 		deps.Edition.RegisterRoutes(r)

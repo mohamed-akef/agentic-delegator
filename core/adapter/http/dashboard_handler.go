@@ -12,18 +12,28 @@ import (
 )
 
 type DashboardHandler struct {
-	list    *usecase.ListJobs
-	keys    ports.APIKeysRepository
-	secrets ports.SecretsRepository
+	list        *usecase.ListJobs
+	keys        ports.APIKeysRepository
+	secrets     ports.SecretsRepository
+	editionName string
+	resolver    UserResolver
 }
 
-func NewDashboardHandler(list *usecase.ListJobs, keys ports.APIKeysRepository, secrets ports.SecretsRepository) *DashboardHandler {
-	return &DashboardHandler{list: list, keys: keys, secrets: secrets}
+func NewDashboardHandler(list *usecase.ListJobs, keys ports.APIKeysRepository, secrets ports.SecretsRepository, editionName string, resolver UserResolver) *DashboardHandler {
+	return &DashboardHandler{list: list, keys: keys, secrets: secrets, editionName: editionName, resolver: resolver}
 }
 
 func (h *DashboardHandler) Landing(w http.ResponseWriter, r *http.Request) {
+	// If the visitor already has a valid session/bearer, skip the marketing
+	// page and send them to the dashboard.
+	if h.resolver != nil {
+		if _, err := h.resolver.Resolve(r); err == nil {
+			http.Redirect(w, r, "/dashboard", http.StatusFound)
+			return
+		}
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = pages.Landing().Render(r.Context(), w)
+	_ = pages.Landing(h.editionName).Render(r.Context(), w)
 }
 
 func (h *DashboardHandler) Dashboard(w http.ResponseWriter, r *http.Request) {

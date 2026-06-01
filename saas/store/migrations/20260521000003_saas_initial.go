@@ -1,6 +1,6 @@
 //go:build saas
 
-// saas/store/migrations/saas_migrations.go
+// saas/store/migrations/20260521000003_saas_initial.go
 package migrations
 
 import (

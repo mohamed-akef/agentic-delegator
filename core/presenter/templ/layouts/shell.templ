@@ -3,29 +3,32 @@ package layouts
 
 templ Shell(title string) {
     <!DOCTYPE html>
-    <html lang="en">
+    <html lang="en" class="dark">
     <head>
         <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{ title } — agentic-delegator</title>
         <script src="https://unpkg.com/htmx.org@2.0.4"></script>
-        <style>
-            body { font-family: ui-sans-serif, -apple-system, sans-serif; max-width: 920px; margin: 2em auto; padding: 0 1em; color: #222; }
-            h1 { font-size: 1.4em; margin: 0 0 0.6em; }
-            h2 { font-size: 1.1em; margin: 1em 0 0.3em; }
-            pre.log { background: #111; color: #e7e7e7; padding: 1em; border-radius: 6px; max-height: 50vh; overflow: auto; font-size: 12px; }
-            .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; text-transform: uppercase; }
-            .b-queued    { background: #eef; color: #44a; }
-            .b-running   { background: #eea; color: #a60; }
-            .b-succeeded { background: #efe; color: #060; }
-            .b-failed    { background: #fee; color: #a00; }
-            .b-cancelled { background: #eee; color: #555; }
-            a { color: #44a; }
-            label { display: block; margin: 0.5em 0; }
-            input, button { font: inherit; padding: 0.3em 0.6em; }
-        </style>
+        <link rel="preconnect" href="https://rsms.me/" />
+        <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+        <link rel="stylesheet" href="/static/css/app.css" />
     </head>
-    <body>
-        { children... }
+    <body class="min-h-screen font-sans antialiased">
+        <header class="border-b border-border bg-background/80 backdrop-blur sticky top-0 z-10">
+            <div class="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+                <a href="/" class="flex items-center gap-2 font-semibold tracking-tight">
+                    <span class="inline-block w-2 h-2 rounded-full bg-success"></span>
+                    agentic-delegator
+                </a>
+                <nav class="flex items-center gap-1 text-sm text-muted-foreground">
+                    <a href="/dashboard" class="px-3 py-1.5 rounded-md hover:text-foreground hover:bg-accent transition">Dashboard</a>
+                    <a href="/settings" class="px-3 py-1.5 rounded-md hover:text-foreground hover:bg-accent transition">Settings</a>
+                </nav>
+            </div>
+        </header>
+        <main class="max-w-5xl mx-auto px-6 py-10">
+            { children... }
+        </main>
     </body>
     </html>
 }

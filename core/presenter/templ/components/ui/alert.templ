@@ -1,0 +1,34 @@
+// core/presenter/templ/components/ui/alert.templ
+package ui
+
+func alertClasses(variant string) string {
+    base := "relative w-full rounded-lg border p-4 text-sm"
+    switch variant {
+    case "destructive":
+        return base + " border-destructive/40 bg-destructive/10 text-destructive"
+    case "success":
+        return base + " border-success/40 bg-success/10 text-success"
+    case "warning":
+        return base + " border-warning/40 bg-warning/10 text-warning"
+    default:
+        return base + " border-border bg-card text-foreground"
+    }
+}
+
+templ Alert(variant string) {
+    <div role="alert" class={ alertClasses(variant) }>
+        { children... }
+    </div>
+}
+
+templ AlertTitle() {
+    <h5 class="mb-1 font-medium leading-none tracking-tight">
+        { children... }
+    </h5>
+}
+
+templ AlertDescription() {
+    <div class="text-sm opacity-90">
+        { children... }
+    </div>
+}

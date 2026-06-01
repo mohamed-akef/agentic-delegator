@@ -96,7 +96,9 @@ func runInit() {
 }
 
 func newAdminKeyPlaintext() string {
-	b := make([]byte, 32)
+	// 24 random bytes → 48 hex chars; with the 13-char prefix the total is 61
+	// bytes, which fits under bcrypt's 72-byte ceiling.
+	b := make([]byte, 24)
 	if _, err := rand.Read(b); err != nil {
 		log.Fatal(err)
 	}
@@ -180,7 +182,7 @@ func runServe() {
 	jobsHandler := adhttp.NewJobsHandler(enqueue, getJob, listJobs)
 	settingsHandler := adhttp.NewSettingsHandler(setAnth, mint, revoke)
 	statusPage := adhttp.NewStatusPage(getJob)
-	dashHandler := adhttp.NewDashboardHandler(listJobs, apiKeys, secrets)
+	dashHandler := adhttp.NewDashboardHandler(listJobs, apiKeys, secrets, edition.Name(), editionResolver{e: edition})
 
 	router := adhttp.NewRouter(adhttp.Deps{
 		Resolver:        editionResolver{e: edition},

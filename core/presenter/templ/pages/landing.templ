@@ -1,12 +1,39 @@
 // core/presenter/templ/pages/landing.templ
 package pages
 
-import "agentic-delegator/core/presenter/templ/layouts"
+import (
+    "agentic-delegator/core/presenter/templ/components/ui"
+    "agentic-delegator/core/presenter/templ/layouts"
+)
 
-templ Landing() {
+templ Landing(editionName string) {
     @layouts.Shell("Welcome") {
-        <h1>agentic-delegator</h1>
-        <p>Self-hosted background coding agent for Claude Code.</p>
-        <p>Go to <a href="/dashboard">/dashboard</a> to start.</p>
+        <section class="py-16 text-center space-y-6">
+            <div class="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
+                <span class="inline-block w-1.5 h-1.5 rounded-full bg-success"></span>
+                Background coding agent for Claude Code
+            </div>
+            <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight">
+                Delegate work. Get a PR back.
+            </h1>
+            <p class="max-w-xl mx-auto text-muted-foreground text-base sm:text-lg">
+                Invoke <code class="font-mono text-sm bg-muted px-1.5 py-0.5 rounded">/delegate</code> from any Claude Code session,
+                hand over a spec, and watch the agent open a pull request on your repo.
+            </p>
+            <div class="flex items-center justify-center gap-3 pt-2">
+                if editionName == "saas" {
+                    @ui.LinkButton("/login", "primary") {
+                        Sign in with GitHub
+                    }
+                } else {
+                    @ui.LinkButton("/admin/setup", "primary") {
+                        First-time setup
+                    }
+                    @ui.LinkButton("/dashboard", "secondary") {
+                        Open dashboard
+                    }
+                }
+            </div>
+        </section>
     }
 }

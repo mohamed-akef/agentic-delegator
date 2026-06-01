@@ -129,7 +129,7 @@ func main() {
 	jobsHandler := adhttp.NewJobsHandler(enqueue, getJob, listJobs)
 	settingsHandler := adhttp.NewSettingsHandler(setAnth, mint, revoke)
 	statusPage := adhttp.NewStatusPage(getJob)
-	dashHandler := adhttp.NewDashboardHandler(listJobs, apiKeys, &secrets)
+	dashHandler := adhttp.NewDashboardHandler(listJobs, apiKeys, &secrets, edition.Name(), editionResolver{e: edition})
 
 	router := adhttp.NewRouter(adhttp.Deps{
 		Resolver:        editionResolver{e: edition},

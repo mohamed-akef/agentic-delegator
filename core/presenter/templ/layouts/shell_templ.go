@@ -31,20 +31,20 @@ func Shell(title string) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<!doctype html><html lang=\"en\" class=\"dark\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `core/presenter/templ/layouts/shell.templ`, Line: 9, Col: 22}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `core/presenter/templ/layouts/shell.templ`, Line: 10, Col: 22}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " — agentic-delegator</title><script src=\"https://unpkg.com/htmx.org@2.0.4\"></script><style>\n            body { font-family: ui-sans-serif, -apple-system, sans-serif; max-width: 920px; margin: 2em auto; padding: 0 1em; color: #222; }\n            h1 { font-size: 1.4em; margin: 0 0 0.6em; }\n            h2 { font-size: 1.1em; margin: 1em 0 0.3em; }\n            pre.log { background: #111; color: #e7e7e7; padding: 1em; border-radius: 6px; max-height: 50vh; overflow: auto; font-size: 12px; }\n            .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; text-transform: uppercase; }\n            .b-queued    { background: #eef; color: #44a; }\n            .b-running   { background: #eea; color: #a60; }\n            .b-succeeded { background: #efe; color: #060; }\n            .b-failed    { background: #fee; color: #a00; }\n            .b-cancelled { background: #eee; color: #555; }\n            a { color: #44a; }\n            label { display: block; margin: 0.5em 0; }\n            input, button { font: inherit; padding: 0.3em 0.6em; }\n        </style></head><body>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " — agentic-delegator</title><script src=\"https://unpkg.com/htmx.org@2.0.4\"></script><link rel=\"preconnect\" href=\"https://rsms.me/\"><link rel=\"stylesheet\" href=\"https://rsms.me/inter/inter.css\"><link rel=\"stylesheet\" href=\"/static/css/app.css\"></head><body class=\"min-h-screen font-sans antialiased\"><header class=\"border-b border-border bg-background/80 backdrop-blur sticky top-0 z-10\"><div class=\"max-w-5xl mx-auto px-6 h-14 flex items-center justify-between\"><a href=\"/\" class=\"flex items-center gap-2 font-semibold tracking-tight\"><span class=\"inline-block w-2 h-2 rounded-full bg-success\"></span> agentic-delegator</a><nav class=\"flex items-center gap-1 text-sm text-muted-foreground\"><a href=\"/dashboard\" class=\"px-3 py-1.5 rounded-md hover:text-foreground hover:bg-accent transition\">Dashboard</a> <a href=\"/settings\" class=\"px-3 py-1.5 rounded-md hover:text-foreground hover:bg-accent transition\">Settings</a></nav></div></header><main class=\"max-w-5xl mx-auto px-6 py-10\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -52,7 +52,7 @@ func Shell(title string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</main></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
