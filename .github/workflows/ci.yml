@@ -46,6 +46,9 @@ jobs:
       - name: unit tests (race)
         run: go test -race ./...
 
+      - name: apply migrations
+        run: go run ./cmd/agentic-delegator/migrate -dsn "$DELEGATOR_TEST_DSN" up
+
       - name: integration tests
         run: go test -tags=integration ./...
 
