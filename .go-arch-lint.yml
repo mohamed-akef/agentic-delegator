@@ -28,6 +28,12 @@ components:
     in: core/adapter/webhook/**
   adapter_postgres:
     in: core/adapter/postgres/**
+  adapter_credentials:
+    in: core/adapter/credentials/**
+  adapter_ghapp:
+    in: core/adapter/ghapp/**
+  adapter_auth:
+    in: core/adapter/http/auth/**
   adapter_postgres_selfhost:
     in: core/adapter/postgres/selfhost/**
   adapter_docker:
@@ -102,6 +108,15 @@ deps:
     anyVendorDeps: true
   adapter_postgres:
     mayDependOn: [domain, ports]
+    anyVendorDeps: true
+  adapter_credentials:
+    mayDependOn: [domain, ports]
+    anyVendorDeps: true
+  adapter_ghapp:
+    mayDependOn: [domain, ports, usecase, adapter_postgres]
+    anyVendorDeps: true
+  adapter_auth:
+    mayDependOn: [domain, ports, usecase, adapter_postgres]
     anyVendorDeps: true
   adapter_postgres_selfhost:
     mayDependOn: [domain, ports, adapter_postgres, adapter_crypto, runtime_selfhost]
