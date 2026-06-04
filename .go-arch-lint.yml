@@ -69,9 +69,13 @@ deps:
       - ports
     anyVendorDeps: true
 
-  # All adapters may use domain + ports + (eventually) usecase. They may NOT
-  # depend on other adapters — that's the SRP boundary; composition happens
-  # in cmd/*.
+  # All adapters may use domain + ports + (eventually) usecase. As a general
+  # rule they must NOT depend on other adapters — that's the SRP boundary;
+  # composition happens in cmd/*. The one sanctioned exception is that
+  # adapter_ghapp and adapter_auth mayDependOn adapter_postgres, because they
+  # reference its shared persistence row types (postgres.Installation /
+  # postgres.GitHubIdentity) — preserved faithfully from the original
+  # saas/store coupling.
   # Note: go-arch-lint deepScan traces argument-type origins through the
   # composition root. For adapters whose concrete types are injected into
   # runtime/http components via cmd's composition root, we disable deepScan

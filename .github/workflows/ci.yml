@@ -47,27 +47,10 @@ jobs:
         run: go test -race ./...
 
       - name: apply migrations
-        run: go run ./cmd/agentic-delegator/migrate -dsn "$DELEGATOR_TEST_DSN" up
+        run: DELEGATOR_DSN="$DELEGATOR_TEST_DSN" go run ./cmd/agentic-delegator migrate up
 
       - name: integration tests
         run: go test -tags=integration ./...
 
-      - name: saas tests
-        run: go test -tags=saas ./saas/...
-
-      - name: OSS binary builds
+      - name: binary builds
         run: go build ./cmd/agentic-delegator
-
-      - name: SaaS binary builds
-        run: go build -tags=saas ./cmd/agentic-delegator-saas
-
-      - name: module boundary check
-        run: |
-          set -e
-          leak=$(go list -deps ./cmd/agentic-delegator | grep '/saas/' || true)
-          if [ -n "$leak" ]; then
-            echo "BAD: saas leaked into OSS binary"
-            echo "$leak"
-            exit 1
-          fi
-          echo "clean: no saas imports in OSS binary"
