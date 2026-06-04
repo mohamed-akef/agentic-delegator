@@ -18,6 +18,7 @@ type FakeRunnerService struct {
 	alive        map[string]bool
 	callbacks    map[string]func(ports.RunnerResult)
 	nextCounter  int
+	lastID       string
 	StartedSpecs []ports.RunnerStartSpec // append-only history for assertions
 }
 
@@ -42,8 +43,20 @@ func (r *FakeRunnerService) Start(ctx context.Context, spec ports.RunnerStartSpe
 	r.started[id] = spec
 	r.alive[id] = true
 	r.callbacks[id] = onComplete
+	r.lastID = id
 	r.StartedSpecs = append(r.StartedSpecs, spec)
 	return id, nil
+}
+
+// LastStarted returns the container ID and spec of the most recently started
+// container, and ok=false if nothing has been started yet.
+func (r *FakeRunnerService) LastStarted() (string, ports.RunnerStartSpec, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.lastID == "" {
+		return "", ports.RunnerStartSpec{}, false
+	}
+	return r.lastID, r.started[r.lastID], true
 }
 
 func (r *FakeRunnerService) Inspect(ctx context.Context, containerID string) (bool, error) {

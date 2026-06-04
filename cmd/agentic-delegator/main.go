@@ -21,6 +21,7 @@ import (
 	adhttp "agentic-delegator/core/adapter/http"
 	"agentic-delegator/core/adapter/http/auth"
 	"agentic-delegator/core/adapter/idgen"
+	"agentic-delegator/core/adapter/keyhash"
 	"agentic-delegator/core/adapter/postgres"
 	pgmig "agentic-delegator/core/adapter/postgres/migrations"
 	"agentic-delegator/core/adapter/webhook"
@@ -63,7 +64,10 @@ func runServe(cfg *config.Config, db *bun.DB) {
 	jobsRepo := postgres.NewJobsRepo(db)
 	rawSecrets := postgres.NewSecretsRepo(db)
 	secrets := encryptingSecrets{inner: rawSecrets, aes: aes}
-	apiKeys := postgres.NewAPIKeysRepo(db)
+	// bcrypt minted keys at the composition seam (mirrors encryptingSecrets):
+	// MintAPIKey hands us the plaintext in Hash; the resolver bcrypt-compares
+	// on read, so the write side must hash.
+	apiKeys := keyhash.New(postgres.NewAPIKeysRepo(db))
 	usersBootstrap := postgres.NewUsersBootstrapRepo(db)
 
 	runner := docker.New(docker.Config{Image: cfg.RunnerImage, CPUs: "2", MemoryMB: 2048})
