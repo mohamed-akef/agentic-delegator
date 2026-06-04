@@ -25,7 +25,7 @@ jobs:
           --health-retries 10
     env:
       DELEGATOR_TEST_DSN: postgres://delegator:delegator@127.0.0.1:5433/delegator?sslmode=disable
-      AGENTIC_MASTER_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+      AGENTIC_MASTER_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
     steps:
       - uses: actions/checkout@v4
 
@@ -47,27 +47,10 @@ jobs:
         run: go test -race ./...
 
       - name: apply migrations
-        run: go run ./cmd/agentic-delegator/migrate -dsn "$DELEGATOR_TEST_DSN" up
+        run: DELEGATOR_DSN="$DELEGATOR_TEST_DSN" go run ./cmd/agentic-delegator migrate up
 
       - name: integration tests
         run: go test -tags=integration ./...
 
-      - name: saas tests
-        run: go test -tags=saas ./saas/...
-
-      - name: OSS binary builds
+      - name: binary builds
         run: go build ./cmd/agentic-delegator
-
-      - name: SaaS binary builds
-        run: go build -tags=saas ./cmd/agentic-delegator-saas
-
-      - name: module boundary check
-        run: |
-          set -e
-          leak=$(go list -deps ./cmd/agentic-delegator | grep '/saas/' || true)
-          if [ -n "$leak" ]; then
-            echo "BAD: saas leaked into OSS binary"
-            echo "$leak"
-            exit 1
-          fi
-          echo "clean: no saas imports in OSS binary"

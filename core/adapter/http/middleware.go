@@ -15,8 +15,8 @@ type contextKey int
 // Exported so that tests can inject a user ID directly into the context.
 const UserIDKey contextKey = 1
 
-// UserResolver looks up a user from an HTTP request. Editions implement this;
-// for selfhost it's the admin, for SaaS it's a session or bearer-key lookup.
+// UserResolver looks up a user from an HTTP request via session cookie or
+// bearer API key.
 type UserResolver interface {
 	Resolve(r *http.Request) (domain.UserID, error)
 }

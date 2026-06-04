@@ -17,6 +17,15 @@ type Config struct {
 	WorkDirHost          string // host dir mounted into runners
 	MaxConcurrentPerUser int    // default 3
 	MaxConcurrentGlobal  int    // default 10
+
+	// GitHub App + OAuth (required for `serve`; optional for `migrate`).
+	GHAppID            int64
+	GHAppPrivateKey    []byte
+	GHAppSlug          string
+	GHClientID         string
+	GHClientSecret     string
+	GHOAuthRedirectURL string
+	GHWebhookSecret    []byte
 }
 
 func Load() (*Config, error) {
@@ -27,6 +36,14 @@ func Load() (*Config, error) {
 		WorkDirHost:          getEnv("AGENTIC_WORK_DIR", "/tmp/agentic-delegator"),
 		MaxConcurrentPerUser: getEnvInt("AGENTIC_MAX_CONCURRENT_PER_USER", 3),
 		MaxConcurrentGlobal:  getEnvInt("AGENTIC_MAX_CONCURRENT_GLOBAL", 10),
+
+		GHAppID:            getEnvInt64("AGENTIC_GH_APP_ID", 0),
+		GHAppPrivateKey:    []byte(getEnv("AGENTIC_GH_APP_PRIVATE_KEY", "")),
+		GHAppSlug:          getEnv("AGENTIC_GH_APP_SLUG", ""),
+		GHClientID:         getEnv("AGENTIC_GH_CLIENT_ID", ""),
+		GHClientSecret:     getEnv("AGENTIC_GH_CLIENT_SECRET", ""),
+		GHOAuthRedirectURL: getEnv("AGENTIC_GH_OAUTH_REDIRECT_URL", ""),
+		GHWebhookSecret:    []byte(getEnv("AGENTIC_GH_WEBHOOK_SECRET", "")),
 	}
 
 	keyHex := getEnv("AGENTIC_MASTER_KEY", "")
@@ -52,6 +69,15 @@ func getEnv(name, def string) string {
 func getEnvInt(name string, def int) int {
 	if v := os.Getenv(name); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
+func getEnvInt64(name string, def int64) int64 {
+	if v := os.Getenv(name); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
 			return n
 		}
 	}

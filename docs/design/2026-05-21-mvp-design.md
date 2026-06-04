@@ -521,3 +521,13 @@ To be created in `/Users/akef/workspace/agentic-delegator`:
 - `github.com/google/go-github/v60` + `github.com/bradleyfalzon/ghinstallation/v2` (saas only)
 - `golang.org/x/crypto/bcrypt`
 - `github.com/fgrosse/go-arch-lint` (or `github.com/loov/dotc` / hand-rolled go-list checker) for architectural enforcement
+
+## Addendum (2026-06-04): SaaS-only collapse
+
+The dual-edition model (selfhost OSS + SaaS) was dropped. The product is now
+SaaS-only: one binary (`cmd/agentic-delegator`), no build tags, and no
+`runtime.Edition` port. The former `saas/` packages moved into the adapter
+layer (`core/adapter/ghapp`, `core/adapter/http/auth`, `core/adapter/postgres`)
+and the secrets-backed Anthropic provider moved to `core/adapter/credentials`.
+Migrations were consolidated into a single initial migration. See
+`docs/superpowers/specs/2026-06-03-saas-only-collapse-design.md`.

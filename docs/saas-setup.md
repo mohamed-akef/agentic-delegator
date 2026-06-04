@@ -1,4 +1,8 @@
-# SaaS deployment — setup guide
+# Deployment — setup guide
+
+This is the canonical setup guide for running agentic-delegator. The service
+authenticates users via GitHub OAuth, accesses their repos via a GitHub App
+installation, and runs Claude Code on a sandboxed runner.
 
 ## 1. Register a GitHub App
 
@@ -25,7 +29,7 @@ After creation, capture:
 - App "slug" (the URL-friendly name, e.g. `agentic-delegator`)
 - The webhook secret you generated above
 
-## 2. Configure env vars on the SaaS host
+## 2. Configure env vars on the host
 
 ```bash
 export AGENTIC_HTTP_BIND=127.0.0.1:8787
@@ -45,15 +49,17 @@ export AGENTIC_GH_WEBHOOK_SECRET=<the hex string from above>
 ## 3. Migrate the database
 
 ```bash
-agentic-delegator-saas migrate
+go run ./cmd/agentic-delegator migrate up
+# or, from a built binary: bin/agentic-delegator migrate up
 ```
 
-This applies both core migrations and the SaaS-only tables.
+This applies the single consolidated initial migration.
 
 ## 4. Run the binary
 
 ```bash
-agentic-delegator-saas serve
+go run ./cmd/agentic-delegator serve
+# or, from a built binary (make build): bin/agentic-delegator serve
 ```
 
 Reverse-proxy via Caddy to `https://<your-domain>`.
@@ -69,11 +75,11 @@ Reverse-proxy via Caddy to `https://<your-domain>`.
 - Install `skill/delegate.md` locally + set env vars
 - `/delegate` in Claude Code → confirm → wait for PR
 
-## Differences from selfhost
+## How auth and isolation work
 
-| Concern | Selfhost | SaaS |
-|---|---|---|
-| Auth | Single admin API key | GitHub OAuth signup + per-user API keys |
-| Repo access | Admin's PAT | GitHub App installation tokens (per user, per repo) |
-| Data isolation | N/A (single user) | Strict per-user scoping via `Edition.ResolveUser` |
-| Persistence | Postgres (shared schema) | Postgres + SaaS-only tables (identities, installations, sessions) |
+| Concern | How it works |
+|---|---|
+| Auth | GitHub OAuth sign-in + per-user API keys minted from `/settings` |
+| Repo access | GitHub App installation tokens (per user, per repo) |
+| Data isolation | Strict per-user scoping; every request resolves to a `UserID` via session cookie or bearer key |
+| Persistence | Postgres (users, jobs, api_keys, user_secrets, identities, installations, sessions) |

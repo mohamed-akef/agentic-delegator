@@ -7,8 +7,7 @@ The codebase follows Clean Architecture with strict dependency direction:
 - `core/domain/` imports nothing from this repo
 - `core/usecase/` imports only `domain` + `usecase/ports`
 - `core/adapter/<X>/` may import `domain`, `ports`, `usecase`, but NOT other `adapter/*` siblings
-- `saas/` imports gated by `//go:build saas`; OSS binary never includes it
-- `cmd/` is the only place that wires concrete adapters together
+- `cmd/agentic-delegator` is the only place that wires concrete adapters together
 
 `make arch-check` enforces this. CI fails on violations.
 
@@ -24,11 +23,12 @@ The codebase follows Clean Architecture with strict dependency direction:
    - Adapters → integration tests with `//go:build integration` + real Postgres/Docker
 6. Update `api/openapi.yaml` if you're changing the HTTP contract, then `make generate`.
 
-## Build modes
+## Build + run
 
 ```bash
-go build ./cmd/agentic-delegator              # OSS (selfhost)
-go build -tags=saas ./cmd/agentic-delegator-saas  # SaaS (includes saas/)
+make build                                    # build bin/agentic-delegator
+go run ./cmd/agentic-delegator migrate up     # apply migrations
+go run ./cmd/agentic-delegator serve          # run the server
 ```
 
 ## Plans + specs
@@ -44,4 +44,5 @@ Long-form changes go through brainstorming → spec → plan → execution. See 
 - `make arch-check` — Clean Architecture rule check
 - `make generate` — re-run oapi-codegen + templ
 - `make dev-db-up` / `dev-db-down` — local Postgres on host port 5433
-- `make build` / `make build-saas` — build the binaries
+- `make build` — build the binary
+- `make migrate` — apply migrations

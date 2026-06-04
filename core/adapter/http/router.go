@@ -11,9 +11,9 @@ import (
 	"agentic-delegator/core/presenter/static"
 )
 
-// EditionRouteMounter is the slice of the runtime.Edition interface the
-// router needs. Defined here so router doesn't import core/runtime.
-type EditionRouteMounter interface {
+// RouteMounter lets the composition root mount auth/webhook routes without the
+// http adapter importing the auth/ghapp adapters (preserves the SRP boundary).
+type RouteMounter interface {
 	RegisterRoutes(r chi.Router)
 }
 
@@ -25,7 +25,7 @@ type Deps struct {
 	SettingsHandler *SettingsHandler
 	StatusPage      *StatusPage
 	Dashboard       *DashboardHandler
-	Edition         EditionRouteMounter // calls Edition.RegisterRoutes
+	Routes          RouteMounter // mounts /login, /auth/*, /webhooks/github
 }
 
 // NewRouter builds and returns the chi router with all API routes mounted.
@@ -36,9 +36,10 @@ func NewRouter(deps Deps) chi.Router {
 	// public (no auth)
 	r.Get("/", deps.Dashboard.Landing)
 	r.Handle("/static/*", nethttp.StripPrefix("/static/", static.Handler()))
-	// edition-specific routes (selfhost: /admin/setup; saas: /login, etc.)
-	if deps.Edition != nil {
-		deps.Edition.RegisterRoutes(r)
+	// auth + GitHub-App routes (/login, /auth/github/callback,
+	// /auth/github-app/*, /webhooks/github)
+	if deps.Routes != nil {
+		deps.Routes.RegisterRoutes(r)
 	}
 
 	// authenticated routes

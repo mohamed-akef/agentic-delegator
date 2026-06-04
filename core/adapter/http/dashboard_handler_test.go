@@ -26,7 +26,6 @@ func TestDashboard_listsJobs(t *testing.T) {
 		&usecase.ListJobs{Jobs: jobs},
 		testutil.NewFakeAPIKeysRepo(),
 		testutil.NewFakeSecretsRepo(),
-		"selfhost",
 		nil, // landing redirect-if-authenticated not exercised in dashboard test
 	)
 

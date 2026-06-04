@@ -6,7 +6,7 @@ import (
     "agentic-delegator/core/presenter/templ/layouts"
 )
 
-templ Landing(editionName string) {
+templ Landing() {
     @layouts.Shell("Welcome") {
         <section class="py-16 text-center space-y-6">
             <div class="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
@@ -21,17 +21,8 @@ templ Landing(editionName string) {
                 hand over a spec, and watch the agent open a pull request on your repo.
             </p>
             <div class="flex items-center justify-center gap-3 pt-2">
-                if editionName == "saas" {
-                    @ui.LinkButton("/login", "primary") {
-                        Sign in with GitHub
-                    }
-                } else {
-                    @ui.LinkButton("/admin/setup", "primary") {
-                        First-time setup
-                    }
-                    @ui.LinkButton("/dashboard", "secondary") {
-                        Open dashboard
-                    }
+                @ui.LinkButton("/login", "primary") {
+                    Sign in with GitHub
                 }
             </div>
         </section>

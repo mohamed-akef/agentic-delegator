@@ -17,7 +17,7 @@ If the user's input is phrased as a question ("what is…", "how does…", "give
 ## Required env vars (must be set in the user's shell)
 
 - `AGENTIC_DELEGATOR_URL` — e.g. `http://localhost:8787`
-- `AGENTIC_DELEGATOR_API_KEY` — the personal API key minted from the dashboard
+- `AGENTIC_DELEGATOR_API_KEY` — your per-user API key. Sign in with GitHub at `/login`, then mint a key from `/settings`.
 
 If either is missing, stop and tell the user how to set them.
 

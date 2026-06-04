@@ -10,7 +10,7 @@ import (
 	"agentic-delegator/core/domain"
 )
 
-// UsersBootstrapRepo provides the tiny user-row upsert that selfhost needs.
+// UsersBootstrapRepo provides the tiny user-row upsert used at signup.
 type UsersBootstrapRepo struct {
 	db *bun.DB
 }
