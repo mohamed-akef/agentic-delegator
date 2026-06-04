@@ -22,6 +22,8 @@ components:
     in: core/adapter/clock/**
   adapter_idgen:
     in: core/adapter/idgen/**
+  adapter_keyhash:
+    in: core/adapter/keyhash/**
   adapter_crypto:
     in: core/adapter/crypto/**
   adapter_webhook:
@@ -86,6 +88,13 @@ deps:
   adapter_idgen:
     mayDependOn: [domain, ports]
     anyVendorDeps: true
+  # deepScan disabled: the cmd composition root passes a concrete
+  # postgres.APIKeysRepo into keyhash.New; deep scan attributes that injection
+  # as a cross-component import even though no such import exists.
+  adapter_keyhash:
+    mayDependOn: [domain, ports]
+    anyVendorDeps: true
+    deepScan: false
   adapter_crypto:
     mayDependOn: [domain, ports]
     anyVendorDeps: true
