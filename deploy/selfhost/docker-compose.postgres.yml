@@ -1,0 +1,22 @@
+# deploy/selfhost/docker-compose.postgres.yml
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: agentic-delegator-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: delegator
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+      POSTGRES_DB: delegator
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - delegator-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U delegator -d delegator"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  delegator-pgdata:

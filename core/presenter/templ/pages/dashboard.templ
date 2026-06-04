@@ -1,0 +1,54 @@
+// core/presenter/templ/pages/dashboard.templ
+package pages
+
+import (
+    "agentic-delegator/core/domain"
+    "agentic-delegator/core/presenter/templ/components/ui"
+    "agentic-delegator/core/presenter/templ/layouts"
+)
+
+templ Dashboard(jobs []*domain.Job) {
+    @layouts.Shell("Dashboard") {
+        <div class="flex items-baseline justify-between mb-6">
+            <div>
+                <h1 class="text-2xl font-semibold tracking-tight">Dashboard</h1>
+                <p class="text-sm text-muted-foreground mt-1">Recent delegated jobs across your repos.</p>
+            </div>
+            @ui.LinkButton("/settings", "secondary") {
+                Settings
+            }
+        </div>
+
+        if len(jobs) == 0 {
+            @ui.Card() {
+                @ui.CardContent() {
+                    <div class="py-16 text-center space-y-2">
+                        <p class="text-base font-medium">No jobs yet</p>
+                        <p class="text-sm text-muted-foreground">
+                            Run <code class="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">/delegate</code> inside any Claude Code session to start one.
+                        </p>
+                    </div>
+                }
+            }
+        } else {
+            @ui.Card() {
+                <div class="divide-y divide-border">
+                    for _, j := range jobs {
+                        <a href={ templ.SafeURL("/jobs/" + string(j.ID)) }
+                           class="flex items-center justify-between gap-4 px-6 py-4 hover:bg-accent/40 transition">
+                            <div class="min-w-0 flex-1">
+                                <div class="font-mono text-sm truncate">{ string(j.ID) }</div>
+                                <div class="text-xs text-muted-foreground mt-1 truncate">
+                                    { j.Repo } · <span class="font-mono">{ j.WorkBranch }</span>
+                                </div>
+                            </div>
+                            @ui.Badge(string(j.Status)) {
+                                { string(j.Status) }
+                            }
+                        </a>
+                    }
+                </div>
+            }
+        }
+    }
+}

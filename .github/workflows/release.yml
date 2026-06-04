@@ -1,0 +1,82 @@
+# .github/workflows/release.yml
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { goos: linux,   goarch: amd64 }
+          - { goos: linux,   goarch: arm64 }
+          - { goos: darwin,  goarch: amd64 }
+          - { goos: darwin,  goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build OSS binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p dist
+          go build -o dist/agentic-delegator ./cmd/agentic-delegator
+          cp deploy/selfhost/agentic-delegator.service dist/
+          cp deploy/selfhost/docker-compose.postgres.yml dist/
+          tar -czf "agentic-delegator-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" -C dist .
+
+      - name: Build SaaS binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p dist-saas
+          go build -tags=saas -o dist-saas/agentic-delegator-saas ./cmd/agentic-delegator-saas
+          cp deploy/saas/agentic-delegator-saas.service dist-saas/
+          cp deploy/saas/Caddyfile.example dist-saas/
+          cp deploy/saas/docker-compose.postgres.yml dist-saas/
+          tar -czf "agentic-delegator-saas-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" -C dist-saas .
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            agentic-delegator-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+            agentic-delegator-saas-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+
+  runner-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + push runner image
+        uses: docker/build-push-action@v5
+        with:
+          context: runner
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/agentic-delegator-runner:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/agentic-delegator-runner:latest
+          platforms: linux/amd64,linux/arm64

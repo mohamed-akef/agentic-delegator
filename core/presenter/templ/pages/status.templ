@@ -1,0 +1,78 @@
+// core/presenter/templ/pages/status.templ
+package pages
+
+import (
+    "agentic-delegator/core/domain"
+    "agentic-delegator/core/presenter/templ/components/ui"
+    "agentic-delegator/core/presenter/templ/layouts"
+)
+
+templ Status(j *domain.Job, logTail string) {
+    @layouts.Shell("Job " + string(j.ID)) {
+        <div class="space-y-6">
+            <div>
+                <div class="flex items-center gap-3 mb-2">
+                    <h1 class="text-2xl font-semibold tracking-tight">Job</h1>
+                    <code class="font-mono text-sm bg-muted px-2 py-0.5 rounded">{ string(j.ID) }</code>
+                    @ui.Badge(string(j.Status)) {
+                        { string(j.Status) }
+                    }
+                </div>
+                <p class="text-sm text-muted-foreground">
+                    <strong class="text-foreground">{ j.Repo }</strong>
+                    · branch <code class="font-mono">{ j.WorkBranch }</code>
+                    (from <code class="font-mono">{ j.BaseBranch }</code>)
+                </p>
+            </div>
+
+            if j.PRURL != "" {
+                @ui.Alert("success") {
+                    @ui.AlertTitle() { Pull request opened }
+                    @ui.AlertDescription() {
+                        <a href={ templ.SafeURL(j.PRURL) } class="underline underline-offset-4 break-all">{ j.PRURL }</a>
+                    }
+                }
+            }
+
+            if j.Error != "" {
+                @ui.Alert("destructive") {
+                    @ui.AlertTitle() { Job failed }
+                    @ui.AlertDescription() {
+                        <code class="font-mono text-xs break-all">{ j.Error }</code>
+                    }
+                }
+            }
+
+            @ui.Card() {
+                @ui.CardHeader() {
+                    <div class="flex items-center justify-between">
+                        @ui.CardTitle() { Logs }
+                        <span class="text-xs text-muted-foreground">
+                            if j.Status == domain.JobStatusRunning || j.Status == domain.JobStatusQueued {
+                                refreshes every 2s
+                            } else {
+                                final
+                            }
+                        </span>
+                    </div>
+                }
+                @ui.CardContent() {
+                    <pre class="bg-black/60 text-zinc-100 font-mono text-xs p-4 rounded-md max-h-[60vh] overflow-auto"
+                         hx-get={ "/jobs/" + string(j.ID) + "/log" }
+                         hx-trigger={ logRefreshTrigger(j) }
+                         hx-swap="innerHTML">
+                        { logTail }
+                    </pre>
+                }
+            }
+        </div>
+    }
+}
+
+func logRefreshTrigger(j *domain.Job) string {
+    // Only auto-poll while running. Terminal states freeze the log view.
+    if j.Status == domain.JobStatusRunning || j.Status == domain.JobStatusQueued {
+        return "every 2s"
+    }
+    return ""
+}

@@ -1,0 +1,26 @@
+// core/presenter/templ/components/ui/badge.templ
+package ui
+
+// Variant maps a status name to a Tailwind class combo.
+func Variant(status string) string {
+    switch status {
+    case "succeeded", "success":
+        return "border-transparent bg-success/15 text-success"
+    case "running":
+        return "border-transparent bg-warning/15 text-warning"
+    case "queued":
+        return "border-transparent bg-accent text-accent-foreground"
+    case "failed", "error", "destructive":
+        return "border-transparent bg-destructive/15 text-destructive"
+    case "cancelled":
+        return "border-transparent bg-muted text-muted-foreground"
+    default:
+        return "border-border bg-card text-foreground"
+    }
+}
+
+templ Badge(variant string) {
+    <span class={ "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium uppercase tracking-wide", Variant(variant) }>
+        { children... }
+    </span>
+}

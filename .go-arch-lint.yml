@@ -1,0 +1,168 @@
+# .go-arch-lint.yml — enforces Clean Architecture dependency rule.
+
+version: 3
+workdir: .
+allow:
+  depOnAnyVendor: true
+  deepScan: true
+
+excludeFiles:
+  - "^.*_test\\.go$"
+
+components:
+  domain:
+    in: core/domain/**
+  ports:
+    in: core/usecase/ports/**
+  usecase:
+    in: core/usecase
+  testutil:
+    in: core/testutil/**
+  adapter_clock:
+    in: core/adapter/clock/**
+  adapter_idgen:
+    in: core/adapter/idgen/**
+  adapter_crypto:
+    in: core/adapter/crypto/**
+  adapter_webhook:
+    in: core/adapter/webhook/**
+  adapter_postgres:
+    in: core/adapter/postgres/**
+  adapter_postgres_selfhost:
+    in: core/adapter/postgres/selfhost/**
+  adapter_docker:
+    in: core/adapter/docker/**
+  adapter_http:
+    in: core/adapter/http
+  adapter_http_gen:
+    in: core/adapter/http/gen
+  runtime:
+    in: core/runtime/**
+  runtime_selfhost:
+    in: core/runtime/selfhost/**
+  presenter:
+    in: core/presenter/**
+  config:
+    in: core/config/**
+  cmd:
+    in: cmd/**
+  saas_root:
+    in: saas
+  saas_signup:
+    in: saas/signup/**
+  saas_ghapp:
+    in: saas/ghapp/**
+  saas_tenancy:
+    in: saas/tenancy/**
+  saas_store:
+    in: saas/store/**
+  saas_presenter:
+    in: saas/presenter/**
+
+deps:
+  domain:
+    anyProjectDeps: false
+    anyVendorDeps: true
+
+  ports:
+    mayDependOn:
+      - domain
+    anyVendorDeps: true
+
+  usecase:
+    mayDependOn:
+      - domain
+      - ports
+    anyVendorDeps: true
+
+  testutil:
+    mayDependOn:
+      - domain
+      - ports
+    anyVendorDeps: true
+
+  # All adapters may use domain + ports + (eventually) usecase. They may NOT
+  # depend on other adapters — that's the SRP boundary; composition happens
+  # in cmd/*.
+  # Note: go-arch-lint deepScan traces argument-type origins through the
+  # composition root. For adapters whose concrete types are injected into
+  # runtime/http components via cmd's composition root, we disable deepScan
+  # per-component to avoid false-positive cross-component violations.
+  adapter_clock:
+    mayDependOn: [domain, ports]
+    anyVendorDeps: true
+  adapter_idgen:
+    mayDependOn: [domain, ports]
+    anyVendorDeps: true
+  adapter_crypto:
+    mayDependOn: [domain, ports]
+    anyVendorDeps: true
+  adapter_webhook:
+    mayDependOn: [domain, ports]
+    anyVendorDeps: true
+  adapter_postgres:
+    mayDependOn: [domain, ports]
+    anyVendorDeps: true
+  adapter_postgres_selfhost:
+    mayDependOn: [domain, ports, adapter_postgres, adapter_crypto, runtime_selfhost]
+    anyVendorDeps: true
+  adapter_docker:
+    mayDependOn: [domain, ports]
+    anyVendorDeps: true
+  # http adapter may also call use cases (it's the inbound side)
+  # adapter_http_gen is the oapi-codegen output; it receives injections from adapter_http
+  adapter_http_gen:
+    anyProjectDeps: true
+    anyVendorDeps: true
+  # deepScan disabled: cmd composition root passes concrete adapter types into
+  # adapter_http constructors; deep scan would flag those as cross-component
+  # violations that are not real import dependencies.
+  adapter_http:
+    mayDependOn: [domain, ports, usecase, adapter_http_gen, presenter]
+    anyVendorDeps: true
+    deepScan: false
+  runtime:
+    mayDependOn: [domain, ports]
+    anyVendorDeps: true
+  # deepScan disabled: cmd composition root passes concrete adapter types (e.g.
+  # UsersBootstrapRepo, clock.System) into runtime_selfhost constructors; the
+  # deep scan attributes those as adapter → runtime_selfhost violations even
+  # though no adapter imports runtime_selfhost.
+  runtime_selfhost:
+    mayDependOn: [domain, ports, runtime, usecase]
+    anyVendorDeps: true
+    deepScan: false
+  presenter:
+    mayDependOn: [domain, presenter]
+    anyVendorDeps: true
+  config:
+    mayDependOn: []
+    anyProjectDeps: false
+    anyVendorDeps: true
+  # cmd is the composition root — may depend on all project components.
+  # deepScan is disabled: the composition root intentionally passes concrete
+  # adapter types across component boundaries; deep-scan would flag those as
+  # cross-component violations when they are actually correct wiring.
+  cmd:
+    anyProjectDeps: true
+    anyVendorDeps: true
+    deepScan: false
+  saas_root:
+    mayDependOn: [domain, ports, usecase, runtime, presenter, adapter_postgres, adapter_crypto, adapter_http, saas_signup, saas_ghapp, saas_tenancy, saas_store, saas_presenter]
+    anyVendorDeps: true
+    deepScan: false
+  saas_signup:
+    mayDependOn: [domain, ports, usecase, runtime, saas_store, saas_tenancy]
+    anyVendorDeps: true
+  saas_ghapp:
+    mayDependOn: [domain, ports, usecase, runtime, saas_store, adapter_crypto]
+    anyVendorDeps: true
+  saas_tenancy:
+    mayDependOn: [domain, ports, usecase, saas_store]
+    anyVendorDeps: true
+  saas_store:
+    mayDependOn: [domain, ports, adapter_postgres]
+    anyVendorDeps: true
+  saas_presenter:
+    mayDependOn: [domain, presenter]
+    anyVendorDeps: true

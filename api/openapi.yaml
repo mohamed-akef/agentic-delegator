@@ -1,0 +1,242 @@
+openapi: 3.1.0
+info:
+  title: agentic-delegator
+  version: 0.1.0
+  description: Spec-driven background coding agent service.
+servers:
+  - url: http://localhost:8787
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    JobStatus:
+      type: string
+      enum: [queued, running, succeeded, failed, cancelled]
+
+    SourceType:
+      type: string
+      enum: [inline, path, url]
+
+    EnqueueJobRequest:
+      type: object
+      required: [repo, base_branch, work_branch, spec_source, source_type]
+      properties:
+        repo:
+          type: string
+          example: "owner/repo"
+        base_branch:
+          type: string
+          example: "main"
+        work_branch:
+          type: string
+          example: "agentic/auth-9q2k"
+        spec_source:
+          type: string
+        source_type:
+          $ref: "#/components/schemas/SourceType"
+        model_override:
+          type: string
+
+    EnqueueJobResponse:
+      type: object
+      required: [job_id, status_url]
+      properties:
+        job_id:
+          type: string
+          example: "j_8x2K9q"
+        status_url:
+          type: string
+          format: uri
+
+    Job:
+      type: object
+      required: [id, status, repo, base_branch, work_branch, source_type, log_path, created_at]
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        status:
+          $ref: "#/components/schemas/JobStatus"
+        repo:
+          type: string
+        base_branch:
+          type: string
+        work_branch:
+          type: string
+        spec_source:
+          type: string
+        source_type:
+          $ref: "#/components/schemas/SourceType"
+        model_override:
+          type: string
+        pr_url:
+          type: string
+        error:
+          type: string
+        log_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+
+    SetAnthropicRequest:
+      type: object
+      required: [api_key]
+      properties:
+        api_key:
+          type: string
+
+    MintAPIKeyRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    MintAPIKeyResponse:
+      type: object
+      required: [id, plaintext, prefix]
+      properties:
+        id:
+          type: string
+        plaintext:
+          type: string
+          description: "Shown once at creation, never again"
+        prefix:
+          type: string
+
+    APIKey:
+      type: object
+      required: [id, name, prefix, created_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        prefix:
+          type: string
+        last_used_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/jobs:
+    post:
+      operationId: enqueueJob
+      summary: Enqueue a new job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnqueueJobRequest"
+      responses:
+        "200":
+          description: Job enqueued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnqueueJobResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+    get:
+      operationId: listJobs
+      summary: List jobs for the authenticated user
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Job"
+
+  /api/jobs/{id}:
+    get:
+      operationId: getJob
+      summary: Get one job
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "404":
+          description: Not found
+
+  /settings/anthropic:
+    post:
+      operationId: setAnthropicCredentials
+      summary: Set or update the user's Anthropic API key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetAnthropicRequest"
+      responses:
+        "204":
+          description: Stored
+
+  /settings/api-keys:
+    post:
+      operationId: mintAPIKey
+      summary: Mint a new personal API key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MintAPIKeyRequest"
+      responses:
+        "200":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MintAPIKeyResponse"

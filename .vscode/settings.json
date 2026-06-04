@@ -1,0 +1,9 @@
+{
+  "files.eol": "\n",
+  "[powershell]": {
+    "files.eol": "\r\n"
+  },
+  "[bat]": {
+    "files.eol": "\r\n"
+  }
+}

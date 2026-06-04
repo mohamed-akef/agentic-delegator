@@ -1,0 +1,76 @@
+// core/presenter/templ/pages/settings.templ
+package pages
+
+import (
+    "agentic-delegator/core/domain"
+    "agentic-delegator/core/presenter/templ/components/ui"
+    "agentic-delegator/core/presenter/templ/layouts"
+)
+
+templ Settings(keys []*domain.APIKey, hasAnthropic bool) {
+    @layouts.Shell("Settings") {
+        <div class="mb-8">
+            <h1 class="text-2xl font-semibold tracking-tight">Settings</h1>
+            <p class="text-sm text-muted-foreground mt-1">Credentials used by the agent runtime and the delegate skill.</p>
+        </div>
+
+        <div class="space-y-6">
+            @ui.Card() {
+                @ui.CardHeader() {
+                    @ui.CardTitle() { Anthropic API key }
+                    @ui.CardDescription() {
+                        Used by the runner to call Claude Code on your behalf.
+                    }
+                }
+                @ui.CardContent() {
+                    <div class="space-y-4">
+                        if hasAnthropic {
+                            @ui.Alert("success") {
+                                @ui.AlertDescription() {
+                                    Configured. Re-submitting below will replace the stored key.
+                                }
+                            }
+                        } else {
+                            @ui.Alert("warning") {
+                                @ui.AlertDescription() {
+                                    Not yet set. Paste your Anthropic API key to enable job execution.
+                                }
+                            }
+                        }
+                        <form method="POST" action="/settings/anthropic" hx-post="/settings/anthropic" hx-swap="none" class="flex gap-2">
+                            @ui.Input("api_key", "password", "sk-ant-...", true)
+                            @ui.Button("primary", "submit") { Save }
+                        </form>
+                    </div>
+                }
+            }
+
+            @ui.Card() {
+                @ui.CardHeader() {
+                    @ui.CardTitle() { Personal API keys }
+                    @ui.CardDescription() {
+                        Used by the <code class="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">/delegate</code> skill to authenticate to this server.
+                    }
+                }
+                @ui.CardContent() {
+                    <form method="POST" action="/settings/api-keys" class="flex gap-2 mb-4">
+                        @ui.Input("name", "text", "laptop, work-machine, ...", true)
+                        @ui.Button("primary", "submit") { Mint }
+                    </form>
+                    if len(keys) > 0 {
+                        <div class="rounded-md border border-border divide-y divide-border">
+                            for _, k := range keys {
+                                <div class="flex items-center justify-between px-4 py-3 text-sm">
+                                    <code class="font-mono text-xs">{ k.Prefix }…</code>
+                                    <span class="text-muted-foreground">{ k.Name }</span>
+                                </div>
+                            }
+                        </div>
+                    } else {
+                        <p class="text-sm text-muted-foreground">No keys yet.</p>
+                    }
+                }
+            }
+        </div>
+    }
+}

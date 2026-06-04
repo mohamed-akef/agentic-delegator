@@ -1,0 +1,17 @@
+# deploy/saas/Caddyfile.example
+# Replace <your-domain> with your actual domain; Caddy will auto-fetch TLS certs.
+
+<your-domain> {
+    reverse_proxy 127.0.0.1:8787
+
+    # Long-running runner jobs can take many minutes — bump timeouts.
+    request_body {
+        max_size 10MB
+    }
+
+    encode gzip zstd
+
+    log {
+        output file /var/log/caddy/agentic-delegator-saas.log
+    }
+}
