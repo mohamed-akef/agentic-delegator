@@ -1,4 +1,4 @@
-.PHONY: build build-saas test test-race lint arch-check generate dev migrate migrate-saas dev-db-up dev-db-down test-integration clean css tailwindcss-install
+.PHONY: build test test-race lint arch-check generate dev migrate dev-db-up dev-db-down test-integration clean css tailwindcss-install
 
 GO := go
 GOFLAGS :=
@@ -13,9 +13,6 @@ TAILWIND_URL := https://github.com/tailwindlabs/tailwindcss/releases/download/$(
 
 build:
 	$(GO) build -o bin/agentic-delegator ./cmd/agentic-delegator
-
-build-saas:
-	$(GO) build -tags=saas -o bin/agentic-delegator-saas ./cmd/agentic-delegator-saas
 
 test:
 	$(GO) test ./...
@@ -46,10 +43,7 @@ dev:
 	@echo "Plan 03 will wire Air here."
 
 migrate:
-	go run ./cmd/agentic-delegator/migrate up
-
-migrate-saas:
-	@echo "Plan 04 will wire SaaS-only migrations here."
+	go run ./cmd/agentic-delegator migrate up
 
 test-integration:
 	$(GO) test -tags=integration ./...

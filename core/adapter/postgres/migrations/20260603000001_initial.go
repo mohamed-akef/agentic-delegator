@@ -1,4 +1,4 @@
-// core/adapter/postgres/migrations/20260521000001_initial.go
+// core/adapter/postgres/migrations/20260603000001_initial.go
 package migrations
 
 import (
@@ -55,12 +55,38 @@ CREATE TABLE IF NOT EXISTS jobs (
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_user_status ON jobs(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS saas_github_identities (
+    user_id       TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    github_id     BIGINT UNIQUE NOT NULL,
+    github_login  TEXT NOT NULL,
+    email         TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS saas_github_installations (
+    installation_id  BIGINT PRIMARY KEY,
+    user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    account_login    TEXT NOT NULL,
+    repos            JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_saas_install_user ON saas_github_installations(user_id);
+
+CREATE TABLE IF NOT EXISTS saas_sessions (
+    id          BYTEA PRIMARY KEY,
+    user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at  TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_saas_sessions_user ON saas_sessions(user_id);
 `)
 			return err
 		},
 		// down
 		func(ctx context.Context, db *bun.DB) error {
 			_, err := db.ExecContext(ctx, `
+DROP TABLE IF EXISTS saas_sessions;
+DROP TABLE IF EXISTS saas_github_installations;
+DROP TABLE IF EXISTS saas_github_identities;
 DROP TABLE IF EXISTS jobs;
 DROP TABLE IF EXISTS api_keys;
 DROP TABLE IF EXISTS user_secrets;

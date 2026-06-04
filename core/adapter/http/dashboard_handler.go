@@ -12,15 +12,14 @@ import (
 )
 
 type DashboardHandler struct {
-	list        *usecase.ListJobs
-	keys        ports.APIKeysRepository
-	secrets     ports.SecretsRepository
-	editionName string
-	resolver    UserResolver
+	list     *usecase.ListJobs
+	keys     ports.APIKeysRepository
+	secrets  ports.SecretsRepository
+	resolver UserResolver
 }
 
-func NewDashboardHandler(list *usecase.ListJobs, keys ports.APIKeysRepository, secrets ports.SecretsRepository, editionName string, resolver UserResolver) *DashboardHandler {
-	return &DashboardHandler{list: list, keys: keys, secrets: secrets, editionName: editionName, resolver: resolver}
+func NewDashboardHandler(list *usecase.ListJobs, keys ports.APIKeysRepository, secrets ports.SecretsRepository, resolver UserResolver) *DashboardHandler {
+	return &DashboardHandler{list: list, keys: keys, secrets: secrets, resolver: resolver}
 }
 
 func (h *DashboardHandler) Landing(w http.ResponseWriter, r *http.Request) {
@@ -33,7 +32,7 @@ func (h *DashboardHandler) Landing(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = pages.Landing(h.editionName).Render(r.Context(), w)
+	_ = pages.Landing().Render(r.Context(), w)
 }
 
 func (h *DashboardHandler) Dashboard(w http.ResponseWriter, r *http.Request) {

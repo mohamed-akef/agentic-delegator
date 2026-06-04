@@ -34,36 +34,18 @@ components:
     in: core/adapter/ghapp/**
   adapter_auth:
     in: core/adapter/http/auth/**
-  adapter_postgres_selfhost:
-    in: core/adapter/postgres/selfhost/**
   adapter_docker:
     in: core/adapter/docker/**
   adapter_http:
     in: core/adapter/http
   adapter_http_gen:
     in: core/adapter/http/gen
-  runtime:
-    in: core/runtime/**
-  runtime_selfhost:
-    in: core/runtime/selfhost/**
   presenter:
     in: core/presenter/**
   config:
     in: core/config/**
   cmd:
     in: cmd/**
-  saas_root:
-    in: saas
-  saas_signup:
-    in: saas/signup/**
-  saas_ghapp:
-    in: saas/ghapp/**
-  saas_tenancy:
-    in: saas/tenancy/**
-  saas_store:
-    in: saas/store/**
-  saas_presenter:
-    in: saas/presenter/**
 
 deps:
   domain:
@@ -109,18 +91,23 @@ deps:
   adapter_postgres:
     mayDependOn: [domain, ports]
     anyVendorDeps: true
+  # deepScan disabled on credentials/ghapp/auth: the cmd composition root passes
+  # concrete adapter types (idgen.NanoID, clock.System, auth.Sessions,
+  # encryptingSecrets) into these adapters' constructors; deep scan attributes
+  # those injections as cross-component import violations even though no such
+  # import exists.
   adapter_credentials:
     mayDependOn: [domain, ports]
     anyVendorDeps: true
+    deepScan: false
   adapter_ghapp:
-    mayDependOn: [domain, ports, usecase, adapter_postgres]
+    mayDependOn: [domain, adapter_postgres]
     anyVendorDeps: true
+    deepScan: false
   adapter_auth:
-    mayDependOn: [domain, ports, usecase, adapter_postgres]
+    mayDependOn: [domain, ports, adapter_postgres]
     anyVendorDeps: true
-  adapter_postgres_selfhost:
-    mayDependOn: [domain, ports, adapter_postgres, adapter_crypto, runtime_selfhost]
-    anyVendorDeps: true
+    deepScan: false
   adapter_docker:
     mayDependOn: [domain, ports]
     anyVendorDeps: true
@@ -134,17 +121,6 @@ deps:
   # violations that are not real import dependencies.
   adapter_http:
     mayDependOn: [domain, ports, usecase, adapter_http_gen, presenter]
-    anyVendorDeps: true
-    deepScan: false
-  runtime:
-    mayDependOn: [domain, ports]
-    anyVendorDeps: true
-  # deepScan disabled: cmd composition root passes concrete adapter types (e.g.
-  # UsersBootstrapRepo, clock.System) into runtime_selfhost constructors; the
-  # deep scan attributes those as adapter → runtime_selfhost violations even
-  # though no adapter imports runtime_selfhost.
-  runtime_selfhost:
-    mayDependOn: [domain, ports, runtime, usecase]
     anyVendorDeps: true
     deepScan: false
   presenter:
@@ -162,22 +138,3 @@ deps:
     anyProjectDeps: true
     anyVendorDeps: true
     deepScan: false
-  saas_root:
-    mayDependOn: [domain, ports, usecase, runtime, presenter, adapter_postgres, adapter_crypto, adapter_http, saas_signup, saas_ghapp, saas_tenancy, saas_store, saas_presenter]
-    anyVendorDeps: true
-    deepScan: false
-  saas_signup:
-    mayDependOn: [domain, ports, usecase, runtime, saas_store, saas_tenancy]
-    anyVendorDeps: true
-  saas_ghapp:
-    mayDependOn: [domain, ports, usecase, runtime, saas_store, adapter_crypto]
-    anyVendorDeps: true
-  saas_tenancy:
-    mayDependOn: [domain, ports, usecase, saas_store]
-    anyVendorDeps: true
-  saas_store:
-    mayDependOn: [domain, ports, adapter_postgres]
-    anyVendorDeps: true
-  saas_presenter:
-    mayDependOn: [domain, presenter]
-    anyVendorDeps: true

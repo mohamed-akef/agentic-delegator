@@ -4,8 +4,7 @@ package domain
 import "time"
 
 // GitCreds is the short-lived credential the runner uses to clone + push.
-// In selfhost mode, this wraps a long-lived PAT (ExpiresAt zero).
-// In SaaS mode, this is a freshly minted GitHub App installation token.
+// May wrap a short-lived installation token (ExpiresAt set) or a long-lived token (ExpiresAt zero).
 type GitCreds struct {
 	Token     string
 	ExpiresAt time.Time
