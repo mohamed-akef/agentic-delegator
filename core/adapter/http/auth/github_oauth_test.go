@@ -63,7 +63,7 @@ func TestOAuth_callback_newUser(t *testing.T) {
 	client := &http.Client{Transport: transport, Timeout: 2 * time.Second}
 
 	sessionsStore := &fakeSessionStore{}
-	sessions := auth.NewSessions(sessionsStore)
+	sessions := auth.NewSessions(sessionsStore, false)
 	identities := newFakeIdentities()
 	users := newFakeUsers()
 	idg := &testutil.FakeIDGenerator{}
@@ -76,6 +76,9 @@ func TestOAuth_callback_newUser(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/auth/github/callback?code=abc&state=xx", nil)
+	// The callback now requires the state query param to match the state cookie
+	// set at /login (CSRF defense).
+	req.AddCookie(&http.Cookie{Name: "agdoauthstate", Value: "xx"})
 	oauth.Callback(rec, req)
 
 	if rec.Code != http.StatusFound {
@@ -92,6 +95,37 @@ func TestOAuth_callback_newUser(t *testing.T) {
 	}
 	if sessionsStore.uid == "" {
 		t.Fatalf("session not created")
+	}
+}
+
+func TestOAuth_callback_rejectsBadState(t *testing.T) {
+	sessions := auth.NewSessions(&fakeSessionStore{}, false)
+	oauth := auth.NewOAuth(
+		auth.OAuthConfig{ClientID: "cid", ClientSecret: "csec", RedirectURL: "https://x/auth/github/callback"},
+		sessions, newFakeIdentities(), newFakeUsers(), &testutil.FakeIDGenerator{}, testutil.NewFakeClock(time.Unix(1000, 0)), nil,
+	)
+
+	cases := []struct {
+		name   string
+		query  string
+		cookie string // "" = no cookie
+	}{
+		{"no cookie", "?code=abc&state=xx", ""},
+		{"mismatch", "?code=abc&state=xx", "yy"},
+		{"missing state param", "?code=abc", "xx"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/auth/github/callback"+tc.query, nil)
+			if tc.cookie != "" {
+				req.AddCookie(&http.Cookie{Name: "agdoauthstate", Value: tc.cookie})
+			}
+			oauth.Callback(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d", rec.Code)
+			}
+		})
 	}
 }
 

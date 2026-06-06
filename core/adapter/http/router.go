@@ -2,7 +2,9 @@
 package http
 
 import (
+	"context"
 	nethttp "net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -26,12 +28,28 @@ type Deps struct {
 	StatusPage      *StatusPage
 	Dashboard       *DashboardHandler
 	Routes          RouteMounter // mounts /login, /auth/*, /webhooks/github
+	// HealthCheck backs /healthz; nil means liveness-only (always 200).
+	HealthCheck func(context.Context) error
 }
 
 // NewRouter builds and returns the chi router with all API routes mounted.
 func NewRouter(deps Deps) chi.Router {
 	r := chi.NewRouter()
-	r.Use(chimw.RequestID, chimw.Recoverer, chimw.RealIP)
+	r.Use(chimw.RequestID, chimw.RealIP, RequestLogger, chimw.Recoverer)
+
+	// liveness/readiness — no auth
+	r.Get("/healthz", func(w nethttp.ResponseWriter, req *nethttp.Request) {
+		if deps.HealthCheck != nil {
+			ctx, cancel := context.WithTimeout(req.Context(), 2*time.Second)
+			defer cancel()
+			if err := deps.HealthCheck(ctx); err != nil {
+				nethttp.Error(w, "unhealthy", nethttp.StatusServiceUnavailable)
+				return
+			}
+		}
+		w.WriteHeader(nethttp.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
 
 	// public (no auth)
 	r.Get("/", deps.Dashboard.Landing)
@@ -49,6 +67,13 @@ func NewRouter(deps Deps) chi.Router {
 			jobs:     deps.JobsHandler,
 			settings: deps.SettingsHandler,
 		}, api)
+		// Routes not in the OpenAPI-generated mux, mounted directly.
+		api.Post("/api/jobs/{id}/cancel", func(w nethttp.ResponseWriter, r *nethttp.Request) {
+			deps.JobsHandler.Cancel(w, r, chi.URLParam(r, "id"))
+		})
+		api.Delete("/settings/api-keys/{id}", func(w nethttp.ResponseWriter, r *nethttp.Request) {
+			deps.SettingsHandler.RevokeAPIKey(w, r, chi.URLParam(r, "id"))
+		})
 		api.Get("/dashboard", deps.Dashboard.Dashboard)
 		api.Get("/settings", deps.Dashboard.Settings)
 		api.Get("/jobs/{id}", func(w nethttp.ResponseWriter, r *nethttp.Request) {

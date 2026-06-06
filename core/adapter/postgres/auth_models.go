@@ -1,4 +1,9 @@
-// core/adapter/postgres/saas_models.go
+// core/adapter/postgres/auth_models.go
+//
+// Bun row models for the multi-user auth tables (GitHub identities, GitHub App
+// installations, and sessions). The table names retain the historical `saas_`
+// prefix to match the initial migration; the dual-edition split they were named
+// for has since been collapsed into this single SaaS binary.
 package postgres
 
 import (

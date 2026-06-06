@@ -26,6 +26,13 @@ type RunnerResult struct {
 	ExitCode int
 	PRURL    string // empty if no PR opened
 	Error    string // populated when ExitCode != 0
+
+	// NotificationWebhook is the URL the runner discovered in the target repo's
+	// .agentic-delegator.yml (empty if none). The completion path fires it.
+	NotificationWebhook string
+	// LogTail is the last slice of runner output, captured by the adapter for
+	// inclusion in the completion webhook payload.
+	LogTail string
 }
 
 // RunnerService is the outbound port for spawning, supervising, and

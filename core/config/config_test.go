@@ -29,3 +29,25 @@ func TestLoad_rejectsBadMasterKey(t *testing.T) {
 		t.Fatalf("expected error for short master key")
 	}
 }
+
+func TestValidateForServe(t *testing.T) {
+	// A config with no GitHub settings must be rejected.
+	bare := &config.Config{}
+	if err := bare.ValidateForServe(); err == nil {
+		t.Fatal("expected ValidateForServe to fail on empty config")
+	}
+
+	full := &config.Config{
+		RunnerImage:        "img:dev",
+		GHAppID:            123,
+		GHAppPrivateKey:    []byte("key"),
+		GHAppSlug:          "slug",
+		GHClientID:         "cid",
+		GHClientSecret:     "csec",
+		GHOAuthRedirectURL: "https://x/cb",
+		GHWebhookSecret:    []byte("whsec"),
+	}
+	if err := full.ValidateForServe(); err != nil {
+		t.Fatalf("expected complete config to validate, got: %v", err)
+	}
+}

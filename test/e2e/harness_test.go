@@ -58,10 +58,10 @@ const testGitHubLogin = "tester"
 
 // harness owns a running httptest.Server and the fakes behind it.
 type harness struct {
-	t        *testing.T
-	server   *httptest.Server
-	browser  *http.Client // carries the session cookie; does not follow redirects
-	cli      *http.Client // no cookies; used for bearer-token (skill) calls
+	t       *testing.T
+	server  *httptest.Server
+	browser *http.Client // carries the session cookie; does not follow redirects
+	cli     *http.Client // no cookies; used for bearer-token (skill) calls
 
 	jobs     *testutil.FakeJobsRepo
 	secrets  *testutil.FakeSecretsRepo
@@ -90,7 +90,7 @@ func newHarness(t *testing.T, opts harnessOpts) *harness {
 	users := &fakeUsersBootstrap{}
 	installs := newFakeInstallationsRepo()
 	sessionStore := newFakeSessionStore()
-	sessions := auth.NewSessions(sessionStore)
+	sessions := auth.NewSessions(sessionStore, false)
 
 	// Real Anthropic creds provider over the fake secrets repo — closes the
 	// set-key -> read-key-at-enqueue loop.
@@ -132,7 +132,8 @@ func newHarness(t *testing.T, opts harnessOpts) *harness {
 
 	enqueue.OnComplete = func(res ports.RunnerResult) { _ = complete.Execute(ctx, res) }
 
-	jobsHandler := adhttp.NewJobsHandler(enqueue, getJob, listJobs)
+	cancelJob := &usecase.CancelJob{Jobs: jobs, Runner: runner, Clock: clk}
+	jobsHandler := adhttp.NewJobsHandler(enqueue, getJob, listJobs, cancelJob)
 	settingsHandler := adhttp.NewSettingsHandler(setAnth, mint, revoke)
 	statusPage := adhttp.NewStatusPage(getJob)
 	dashHandler := adhttp.NewDashboardHandler(listJobs, apiKeys, secrets, resolver)
@@ -245,7 +246,14 @@ func readBody(t *testing.T, resp *http.Response) string {
 // returns once the browser client holds a session cookie.
 func (h *harness) login() {
 	h.t.Helper()
-	resp := h.get(h.browser, "/auth/github/callback?code=testcode&state=xyz", "")
+	// /login sets the agdoauthstate cookie (CSRF defense) and redirects to GitHub.
+	lr := h.get(h.browser, "/login", "")
+	lr.Body.Close()
+	state := h.cookieValue("agdoauthstate")
+	if state == "" {
+		h.t.Fatal("/login did not set the oauth state cookie")
+	}
+	resp := h.get(h.browser, "/auth/github/callback?code=testcode&state="+state, "")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusFound {
 		h.t.Fatalf("oauth callback: want 302, got %d (%s)", resp.StatusCode, readBody(h.t, resp))
@@ -253,6 +261,20 @@ func (h *harness) login() {
 	if !h.hasSessionCookie() {
 		h.t.Fatal("oauth callback did not set a session cookie")
 	}
+}
+
+// cookieValue returns the named cookie's value from the browser jar, or "".
+func (h *harness) cookieValue(name string) string {
+	if h.browser.Jar == nil {
+		return ""
+	}
+	su, _ := http.NewRequest(http.MethodGet, h.server.URL, nil)
+	for _, c := range h.browser.Jar.Cookies(su.URL) {
+		if c.Name == name {
+			return c.Value
+		}
+	}
+	return ""
 }
 
 func (h *harness) hasSessionCookie() bool {

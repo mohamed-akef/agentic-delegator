@@ -60,6 +60,52 @@ func TestHandleRunnerCompletion_failure(t *testing.T) {
 	}
 }
 
+func TestHandleRunnerCompletion_dispatchesWebhook(t *testing.T) {
+	ctx := context.Background()
+	jobs, clock := setupRunningJob(t)
+	clock.Advance(30 * time.Second)
+
+	hooks := testutil.NewFakeWebhookDispatcher()
+	uc := &usecase.HandleRunnerCompletion{
+		Jobs:    jobs,
+		Clock:   clock,
+		Webhook: &usecase.DispatchCompletionWebhook{Dispatcher: hooks},
+	}
+	err := uc.Execute(ctx, ports.RunnerResult{
+		JobID:               "j_1",
+		ExitCode:            0,
+		PRURL:               "https://example/pr/1",
+		NotificationWebhook: "https://hooks.example/x",
+		LogTail:             "done",
+	})
+	if err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+	if len(hooks.Calls) != 1 {
+		t.Fatalf("want 1 webhook call, got %d", len(hooks.Calls))
+	}
+	if hooks.Calls[0].URL != "https://hooks.example/x" {
+		t.Fatalf("webhook url mismatch: %s", hooks.Calls[0].URL)
+	}
+}
+
+func TestHandleRunnerCompletion_noWebhookWhenURLEmpty(t *testing.T) {
+	ctx := context.Background()
+	jobs, clock := setupRunningJob(t)
+	clock.Advance(30 * time.Second)
+
+	hooks := testutil.NewFakeWebhookDispatcher()
+	uc := &usecase.HandleRunnerCompletion{
+		Jobs:    jobs,
+		Clock:   clock,
+		Webhook: &usecase.DispatchCompletionWebhook{Dispatcher: hooks},
+	}
+	_ = uc.Execute(ctx, ports.RunnerResult{JobID: "j_1", ExitCode: 0}) // no NotificationWebhook
+	if len(hooks.Calls) != 0 {
+		t.Fatalf("expected no webhook calls, got %d", len(hooks.Calls))
+	}
+}
+
 func TestHandleRunnerCompletion_unknownJob(t *testing.T) {
 	uc := &usecase.HandleRunnerCompletion{
 		Jobs:  testutil.NewFakeJobsRepo(),

@@ -46,7 +46,7 @@ func bytesEq(a, b []byte) bool {
 
 func TestSessions_setAndRead(t *testing.T) {
 	s := &fakeSessionStore{}
-	mgr := auth.NewSessions(s)
+	mgr := auth.NewSessions(s, false)
 
 	w := httptest.NewRecorder()
 	if err := mgr.Login(context.Background(), w, "u_42"); err != nil {

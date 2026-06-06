@@ -9,6 +9,7 @@ set -euo pipefail
 : "${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY required}"
 : "${SPEC_TYPE:?SPEC_TYPE required}"
 : "${SPEC_VALUE:?SPEC_VALUE required}"
+MODEL_OVERRIDE="${MODEL_OVERRIDE:-}"
 
 cd /workspace
 
@@ -28,6 +29,24 @@ else
     echo "[delegator] creating new branch ${WORK_BRANCH} from ${BASE_BRANCH}"
     git checkout "${BASE_BRANCH}"
     git checkout -b "${WORK_BRANCH}"
+fi
+
+# Per-repo config: .agentic-delegator.yml at the repo root (all keys optional).
+#   model, max_turns, system_prompt_append, allowed_tools[], notification_webhook
+CFG=".agentic-delegator.yml"
+MODEL="${MODEL_OVERRIDE}"
+MAX_TURNS=""
+SYS_APPEND=""
+ALLOWED_TOOLS=""
+if [ -f "${CFG}" ]; then
+    echo "[delegator] reading ${CFG}"
+    [ -z "${MODEL}" ] && MODEL="$(yq -r '.model // ""' "${CFG}")"
+    MAX_TURNS="$(yq -r '.max_turns // ""' "${CFG}")"
+    SYS_APPEND="$(yq -r '.system_prompt_append // ""' "${CFG}")"
+    ALLOWED_TOOLS="$(yq -r '(.allowed_tools // []) | join(",")' "${CFG}")"
+    NOTIFY="$(yq -r '.notification_webhook // ""' "${CFG}")"
+    # Hand the webhook URL back to the orchestrator, which fires it on completion.
+    [ -n "${NOTIFY}" ] && printf '%s' "${NOTIFY}" > /workspace/.notification-webhook
 fi
 
 # Resolve the spec to a single string we feed to Claude.
@@ -52,11 +71,19 @@ When done:
 EOF
 )"
 
-# Run Claude Code in non-interactive mode. The exact flag set may vary across
-# Claude Code releases — adjust if the binary in the image rejects them.
+# Assemble claude flags from the per-repo config. The exact flag set may vary
+# across Claude Code releases — adjust if the binary in the image rejects them.
+CLAUDE_ARGS=(--dangerously-skip-permissions --print)
+[ -n "${MODEL}" ]         && CLAUDE_ARGS+=(--model "${MODEL}")
+[ -n "${MAX_TURNS}" ]     && CLAUDE_ARGS+=(--max-turns "${MAX_TURNS}")
+[ -n "${ALLOWED_TOOLS}" ] && CLAUDE_ARGS+=(--allowedTools "${ALLOWED_TOOLS}")
+[ -n "${SYS_APPEND}" ]    && CLAUDE_ARGS+=(--append-system-prompt "${SYS_APPEND}")
+
 echo "[delegator] running claude…"
-GH_TOKEN="${GH_TOKEN}" claude --dangerously-skip-permissions --print "${PROMPT}"
+set +e
+GH_TOKEN="${GH_TOKEN}" claude "${CLAUDE_ARGS[@]}" "${PROMPT}"
 RC=$?
+set -e
 
 # As a safety net: if Claude didn't write .pr-url but a PR was opened, try to discover it.
 if [ ! -f /workspace/.pr-url ]; then

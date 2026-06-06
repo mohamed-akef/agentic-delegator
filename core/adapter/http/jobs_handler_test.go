@@ -44,7 +44,7 @@ func newRouter(t *testing.T) (chi.Router, *testutil.FakeJobsRepo) {
 
 	r := adhttp.NewRouter(adhttp.Deps{
 		Resolver:        stubResolver{uid: "u_1"},
-		JobsHandler:     adhttp.NewJobsHandler(enqueue, get, list),
+		JobsHandler:     adhttp.NewJobsHandler(enqueue, get, list, nil),
 		SettingsHandler: adhttp.NewSettingsHandler(nil, nil, nil), // not exercised here
 	})
 	return r, jobs

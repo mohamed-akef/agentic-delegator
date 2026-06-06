@@ -3,6 +3,7 @@ package auth
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,7 +25,7 @@ type IdentitiesRepo interface {
 }
 
 // UsersBootstrap is the slice of postgres.UsersBootstrapRepo we need —
-// adds the User row in SaaS mode at signup time.
+// adds the User row at signup time.
 type UsersBootstrap interface {
 	UpsertAdmin(ctx context.Context, id domain.UserID, displayName string, now time.Time) error
 }
@@ -33,6 +34,7 @@ type OAuthConfig struct {
 	ClientID     string
 	ClientSecret string
 	RedirectURL  string // e.g. https://your-domain/auth/github/callback
+	CookieSecure bool   // set true behind TLS so the state cookie is HTTPS-only
 }
 
 type OAuth struct {
@@ -68,10 +70,22 @@ func NewOAuth(
 	}
 }
 
+const oauthStateCookie = "agdoauthstate"
+
 // Login handles GET /login — redirects to GitHub OAuth.
 func (o *OAuth) Login(w http.ResponseWriter, r *http.Request) {
-	state := o.idgen.NewJobID() // any random opaque value
-	// In a fuller impl we'd persist the state — for MVP we accept any state from GitHub.
+	// CSRF defense: bind a random state to a short-lived cookie and echo it to
+	// GitHub. The callback rejects any request whose state doesn't match.
+	state := o.idgen.NewJobID()
+	http.SetCookie(w, &http.Cookie{
+		Name:     oauthStateCookie,
+		Value:    state,
+		MaxAge:   600, // 10 minutes
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   o.cfg.CookieSecure,
+		Path:     "/",
+	})
 	u := url.URL{Scheme: "https", Host: "github.com", Path: "/login/oauth/authorize"}
 	q := u.Query()
 	q.Set("client_id", o.cfg.ClientID)
@@ -84,6 +98,17 @@ func (o *OAuth) Login(w http.ResponseWriter, r *http.Request) {
 
 // Callback handles GET /auth/github/callback.
 func (o *OAuth) Callback(w http.ResponseWriter, r *http.Request) {
+	// CSRF defense: the state echoed back by GitHub must match the cookie we set
+	// at /login. Constant-time compare and require both to be present.
+	stateCookie, err := r.Cookie(oauthStateCookie)
+	gotState := r.URL.Query().Get("state")
+	if err != nil || gotState == "" || subtle.ConstantTimeCompare([]byte(stateCookie.Value), []byte(gotState)) != 1 {
+		http.Error(w, "invalid oauth state", http.StatusBadRequest)
+		return
+	}
+	// State is single-use: clear the cookie regardless of outcome.
+	http.SetCookie(w, &http.Cookie{Name: oauthStateCookie, Value: "", MaxAge: -1, Path: "/"})
+
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		http.Error(w, "missing code", http.StatusBadRequest)
@@ -127,6 +152,9 @@ func (o *OAuth) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Session-fixation defense: drop any session attached to the inbound request
+	// before minting a fresh one for the authenticated user.
+	_ = o.sessions.Logout(r.Context(), w, r)
 	if err := o.sessions.Login(r.Context(), w, uid); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

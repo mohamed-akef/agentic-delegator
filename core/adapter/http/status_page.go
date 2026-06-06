@@ -2,6 +2,7 @@
 package http
 
 import (
+	"io"
 	"net/http"
 	"os"
 
@@ -41,8 +42,20 @@ func (p *StatusPage) LogTail(w http.ResponseWriter, r *http.Request, id string) 
 	_, _ = w.Write([]byte(readLogTail(j.LogPath, 200)))
 }
 
+// maxLogReadBytes bounds how much of a (potentially huge) log file we pull into
+// memory to render the tail.
+const maxLogReadBytes = 256 << 10 // 256 KiB
+
 func readLogTail(path string, maxLines int) string {
-	b, err := os.ReadFile(path)
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	if fi, err := f.Stat(); err == nil && fi.Size() > maxLogReadBytes {
+		_, _ = f.Seek(-maxLogReadBytes, io.SeekEnd)
+	}
+	b, err := io.ReadAll(f)
 	if err != nil {
 		return ""
 	}

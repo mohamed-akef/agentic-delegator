@@ -48,15 +48,36 @@ func TestHTTPWebhook_returnsErrorOn5xx(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	w := webhook.New(&http.Client{Timeout: 2 * time.Second})
+	w := webhook.NewWithBackoff(&http.Client{Timeout: 2 * time.Second}, time.Millisecond)
 	err := w.Dispatch(context.Background(), srv.URL, []byte(`{}`))
 	if err == nil {
 		t.Fatalf("expected error on 5xx response")
 	}
 }
 
+func TestHTTPWebhook_retriesThenSucceeds(t *testing.T) {
+	var attempts int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	w := webhook.NewWithBackoff(&http.Client{Timeout: 2 * time.Second}, time.Millisecond)
+	if err := w.Dispatch(context.Background(), srv.URL, []byte(`{}`)); err != nil {
+		t.Fatalf("expected success after retries, got %v", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("expected 3 attempts, got %d", attempts)
+	}
+}
+
 func TestHTTPWebhook_returnsErrorOnDialFailure(t *testing.T) {
-	w := webhook.New(&http.Client{Timeout: 200 * time.Millisecond})
+	w := webhook.NewWithBackoff(&http.Client{Timeout: 200 * time.Millisecond}, time.Millisecond)
 	err := w.Dispatch(context.Background(), "http://127.0.0.1:1", []byte(`{}`))
 	if err == nil {
 		t.Fatalf("expected dial error")
