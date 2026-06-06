@@ -55,7 +55,18 @@ var _ ports.RunnerService = (*Runner)(nil)
 // callback fires from the supervisor goroutine after the container exits.
 func (r *Runner) Start(ctx context.Context, spec ports.RunnerStartSpec, onComplete func(ports.RunnerResult)) (string, error) {
 	jobDir := filepath.Join(r.cfg.WorkDirHost, string(spec.JobID))
-	if err := os.MkdirAll(jobDir, 0o700); err != nil {
+	if err := os.MkdirAll(jobDir, 0o777); err != nil {
+		return "", err
+	}
+	// The container runs as root (uid 0) but, under --cap-drop=ALL, lacks
+	// CAP_DAC_OVERRIDE — so it cannot bypass DAC checks to write into a host
+	// directory it does not own. Force the workspace mode to 0777 (MkdirAll is
+	// subject to umask) so the container can write its artifacts (.pr-url,
+	// .notification-webhook, the clone) into the bind mount regardless of which
+	// uid it runs as. Exposure is contained: the parent WorkDirHost is 0700, so
+	// this per-job dir is not reachable by other host users, and it is removed
+	// when the job completes.
+	if err := os.Chmod(jobDir, 0o777); err != nil {
 		return "", err
 	}
 

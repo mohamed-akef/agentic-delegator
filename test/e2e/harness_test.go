@@ -58,10 +58,10 @@ const testGitHubLogin = "tester"
 
 // harness owns a running httptest.Server and the fakes behind it.
 type harness struct {
-	t        *testing.T
-	server   *httptest.Server
-	browser  *http.Client // carries the session cookie; does not follow redirects
-	cli      *http.Client // no cookies; used for bearer-token (skill) calls
+	t       *testing.T
+	server  *httptest.Server
+	browser *http.Client // carries the session cookie; does not follow redirects
+	cli     *http.Client // no cookies; used for bearer-token (skill) calls
 
 	jobs     *testutil.FakeJobsRepo
 	secrets  *testutil.FakeSecretsRepo
