@@ -24,10 +24,13 @@ const (
 )
 
 type Sessions struct {
-	store SessionStore
+	store  SessionStore
+	secure bool // mark cookies Secure (HTTPS-only); set true in production behind TLS
 }
 
-func NewSessions(store SessionStore) *Sessions { return &Sessions{store: store} }
+func NewSessions(store SessionStore, secure bool) *Sessions {
+	return &Sessions{store: store, secure: secure}
+}
 
 // Login mints a session, sets the cookie, and persists the session record.
 func (s *Sessions) Login(ctx context.Context, w http.ResponseWriter, userID domain.UserID) error {
@@ -46,7 +49,7 @@ func (s *Sessions) Login(ctx context.Context, w http.ResponseWriter, userID doma
 		MaxAge:   int(cookieMaxAge.Seconds()),
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   false, // set to true behind TLS via deploy config
+		Secure:   s.secure,
 		Path:     "/",
 	})
 	return nil

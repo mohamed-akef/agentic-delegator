@@ -8,8 +8,8 @@ import (
 )
 
 // AnthropicCredentialsProvider returns the Anthropic credential to pass into
-// the runner. Edition-specific: both editions today read from the
-// SecretsRepository, but the abstraction lets us add OAuth-style sources later.
+// the runner. Today it reads from the SecretsRepository, but the abstraction
+// lets us add OAuth-style sources later.
 type AnthropicCredentialsProvider interface {
 	For(ctx context.Context, userID domain.UserID) (domain.AnthropicCreds, error)
 }

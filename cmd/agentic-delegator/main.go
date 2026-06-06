@@ -3,10 +3,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -40,7 +44,10 @@ func main() {
 	cfg, err := config.Load()
 	must("config", err)
 
-	db, err := postgres.Open(cfg.DSN)
+	db, err := postgres.OpenWithPool(cfg.DSN, postgres.PoolConfig{
+		MaxOpenConns: cfg.DBMaxOpenConns,
+		MaxIdleConns: cfg.DBMaxIdleConns,
+	})
 	must("db", err)
 	defer db.Close()
 
@@ -55,11 +62,19 @@ func main() {
 }
 
 func runServe(cfg *config.Config, db *bun.DB) {
+	must("config", cfg.ValidateForServe())
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	slog.SetDefault(logger)
+
 	ctx := context.Background()
 	clk := clock.System{}
 	idg := idgen.NanoID{}
 	aes, err := adcrypto.NewAESGCM(cfg.MasterKey)
 	must("aes", err)
+
+	// Private log directory (0700) for per-job log files.
+	must("log dir", os.MkdirAll(cfg.LogDir, 0o700))
 
 	jobsRepo := postgres.NewJobsRepo(db)
 	rawSecrets := postgres.NewSecretsRepo(db)
@@ -70,13 +85,19 @@ func runServe(cfg *config.Config, db *bun.DB) {
 	apiKeys := keyhash.New(postgres.NewAPIKeysRepo(db))
 	usersBootstrap := postgres.NewUsersBootstrapRepo(db)
 
-	runner := docker.New(docker.Config{Image: cfg.RunnerImage, CPUs: "2", MemoryMB: 2048})
+	runner := docker.New(docker.Config{
+		Image:          cfg.RunnerImage,
+		CPUs:           "2",
+		MemoryMB:       2048,
+		WorkDirHost:    cfg.WorkDirHost,
+		MaxJobDuration: cfg.MaxJobDuration,
+	})
 	hooks := webhook.New(&http.Client{Timeout: 10 * time.Second})
 
 	identitiesRepo := postgres.NewIdentitiesRepo(db)
 	installationsRepo := postgres.NewInstallationsRepo(db)
 	sessionsRepo := postgres.NewSessionsRepo(db)
-	sessions := auth.NewSessions(sessionsRepo)
+	sessions := auth.NewSessions(sessionsRepo, cfg.CookieSecure)
 
 	appClient := ghapp.NewAppClient(ghapp.AppCreds{
 		AppID:         cfg.GHAppID,
@@ -88,6 +109,7 @@ func runServe(cfg *config.Config, db *bun.DB) {
 			ClientID:     cfg.GHClientID,
 			ClientSecret: cfg.GHClientSecret,
 			RedirectURL:  cfg.GHOAuthRedirectURL,
+			CookieSecure: cfg.CookieSecure,
 		},
 		sessions, identitiesRepo, usersBootstrap, idg, clk, nil,
 	)
@@ -105,22 +127,32 @@ func runServe(cfg *config.Config, db *bun.DB) {
 		Runner:               runner,
 		IDGen:                idg,
 		Clock:                clk,
+		LogDir:               cfg.LogDir,
 		MaxConcurrentPerUser: cfg.MaxConcurrentPerUser,
 		MaxConcurrentGlobal:  cfg.MaxConcurrentGlobal,
 	}
 	getJob := &usecase.GetJob{Jobs: jobsRepo}
 	listJobs := &usecase.ListJobs{Jobs: jobsRepo}
-	complete := &usecase.HandleRunnerCompletion{Jobs: jobsRepo, Clock: clk}
+	dispatchWebhook := &usecase.DispatchCompletionWebhook{Dispatcher: hooks}
+	complete := &usecase.HandleRunnerCompletion{Jobs: jobsRepo, Clock: clk, Webhook: dispatchWebhook}
 	reattach := &usecase.ReattachRunningJobs{Jobs: jobsRepo, Runner: runner, Clock: clk}
 	mint := &usecase.MintAPIKey{Keys: apiKeys, IDGen: idg, Clock: clk}
 	revoke := &usecase.RevokeAPIKey{Keys: apiKeys}
 	setAnth := &usecase.SetAnthropicCredentials{Secrets: &secrets}
-	_ = &usecase.DispatchCompletionWebhook{Dispatcher: hooks}
+	cancelJob := &usecase.CancelJob{Jobs: jobsRepo, Runner: runner, Clock: clk}
 
-	enqueue.OnComplete = func(res ports.RunnerResult) { _ = complete.Execute(ctx, res) }
-	_ = reattach.Execute(ctx)
+	// Completion runs in the runner's supervisor goroutine; give it its own
+	// background context so it survives a request's lifecycle.
+	enqueue.OnComplete = func(res ports.RunnerResult) {
+		if err := complete.Execute(context.Background(), res); err != nil {
+			slog.Error("handle runner completion", "job_id", string(res.JobID), "err", err)
+		}
+	}
+	if err := reattach.Execute(ctx); err != nil {
+		slog.Error("reattach running jobs", "err", err)
+	}
 
-	jobsHandler := adhttp.NewJobsHandler(enqueue, getJob, listJobs)
+	jobsHandler := adhttp.NewJobsHandler(enqueue, getJob, listJobs, cancelJob)
 	settingsHandler := adhttp.NewSettingsHandler(setAnth, mint, revoke)
 	statusPage := adhttp.NewStatusPage(getJob)
 	dashHandler := adhttp.NewDashboardHandler(listJobs, apiKeys, &secrets, resolver)
@@ -132,12 +164,37 @@ func runServe(cfg *config.Config, db *bun.DB) {
 		StatusPage:      statusPage,
 		Dashboard:       dashHandler,
 		Routes:          routeMounter{oauth: oauth, install: installHandler, webhook: webhookHandler},
+		HealthCheck:     func(c context.Context) error { return db.PingContext(c) },
 	})
 
-	log.Printf("listening on http://%s", cfg.HTTPBind)
-	if err := http.ListenAndServe(cfg.HTTPBind, router); err != nil {
+	srv := &http.Server{
+		Addr:              cfg.HTTPBind,
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	// Graceful shutdown on SIGINT/SIGTERM: stop accepting connections and drain
+	// in-flight requests before exiting.
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-stop
+		slog.Info("shutdown signal received, draining")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			slog.Error("graceful shutdown", "err", err)
+		}
+	}()
+
+	slog.Info("listening", "addr", cfg.HTTPBind)
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
+	slog.Info("server stopped")
 }
 
 // routeMounter mounts auth + GitHub-App routes. Living in the composition root

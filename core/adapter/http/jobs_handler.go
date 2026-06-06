@@ -3,6 +3,7 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"agentic-delegator/core/adapter/http/gen"
@@ -15,10 +16,21 @@ type JobsHandler struct {
 	enqueue *usecase.EnqueueJob
 	get     *usecase.GetJob
 	list    *usecase.ListJobs
+	cancel  *usecase.CancelJob
 }
 
-func NewJobsHandler(enqueue *usecase.EnqueueJob, get *usecase.GetJob, list *usecase.ListJobs) *JobsHandler {
-	return &JobsHandler{enqueue: enqueue, get: get, list: list}
+func NewJobsHandler(enqueue *usecase.EnqueueJob, get *usecase.GetJob, list *usecase.ListJobs, cancel *usecase.CancelJob) *JobsHandler {
+	return &JobsHandler{enqueue: enqueue, get: get, list: list, cancel: cancel}
+}
+
+// Cancel handles POST /api/jobs/{id}/cancel.
+func (h *JobsHandler) Cancel(w http.ResponseWriter, r *http.Request, id string) {
+	uid, _ := UserFromContext(r.Context())
+	if err := h.cancel.Execute(r.Context(), usecase.CancelJobInput{JobID: domain.JobID(id), UserID: uid}); err != nil {
+		writeDomainError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // EnqueueJob handles POST /api/jobs.
@@ -44,10 +56,10 @@ func (h *JobsHandler) EnqueueJob(w http.ResponseWriter, r *http.Request) {
 		WorkBranch:    body.WorkBranch,
 		Spec:          domain.SpecSource{Type: domain.SourceType(body.SourceType), Value: body.SpecSource},
 		ModelOverride: body.ModelOverride,
-		LogPath:       "/tmp/" + body.WorkBranch + ".log",
+		// LogPath is derived server-side (private dir + job ID) by the use case.
 	})
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		writeDomainError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -61,7 +73,7 @@ func (h *JobsHandler) GetJob(w http.ResponseWriter, r *http.Request, id string) 
 	uid, _ := UserFromContext(r.Context())
 	j, err := h.get.Execute(r.Context(), usecase.GetJobInput{JobID: domain.JobID(id), UserID: uid})
 	if err != nil {
-		writeJSONError(w, http.StatusNotFound, "not found")
+		writeDomainError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, j)
@@ -90,6 +102,22 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 
 func writeJSONError(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, code, map[string]string{"error": msg})
+}
+
+// writeDomainError maps sentinel domain errors to HTTP status codes so API
+// clients can distinguish bad input (400) from missing (404), forbidden (403),
+// and conflicts (409).
+func writeDomainError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, domain.ErrNotFound):
+		writeJSONError(w, http.StatusNotFound, err.Error())
+	case errors.Is(err, domain.ErrForbidden):
+		writeJSONError(w, http.StatusForbidden, err.Error())
+	case errors.Is(err, domain.ErrConflict), errors.Is(err, domain.ErrInvalidState):
+		writeJSONError(w, http.StatusConflict, err.Error())
+	default:
+		writeJSONError(w, http.StatusBadRequest, err.Error())
+	}
 }
 
 // handlerImpl bridges the generated ServerInterface to our handler structs.

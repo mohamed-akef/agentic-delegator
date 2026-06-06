@@ -62,3 +62,34 @@ func TestWebhook_installationDeleted(t *testing.T) {
 		t.Fatalf("expected installation 42 deleted, got %+v", installs.deleted)
 	}
 }
+
+func TestWebhook_rejectsReplay(t *testing.T) {
+	body := []byte(`{"action":"deleted","installation":{"id":42}}`)
+	mac := hmac.New(sha256.New, []byte("secret"))
+	mac.Write(body)
+	sig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	installs := &fakeInstalls{}
+	h := ghapp.NewWebhookHandler([]byte("secret"), installs)
+
+	send := func() int {
+		req := httptest.NewRequest(http.MethodPost, "/webhooks/github", bytes.NewReader(body))
+		req.Header.Set("X-GitHub-Event", "installation")
+		req.Header.Set("X-Hub-Signature-256", sig)
+		req.Header.Set("X-GitHub-Delivery", "delivery-123")
+		rec := httptest.NewRecorder()
+		h.Handle(rec, req)
+		return rec.Code
+	}
+
+	// Same delivery ID twice: both return 200, but the action runs only once.
+	if c := send(); c != http.StatusOK {
+		t.Fatalf("first delivery status: %d", c)
+	}
+	if c := send(); c != http.StatusOK {
+		t.Fatalf("replayed delivery status: %d", c)
+	}
+	if len(installs.deleted) != 1 {
+		t.Fatalf("replay should not re-run the action; deletes=%d", len(installs.deleted))
+	}
+}

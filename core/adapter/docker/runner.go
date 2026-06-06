@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
+	"agentic-delegator/core/domain"
 	"agentic-delegator/core/usecase/ports"
 )
 
@@ -18,8 +20,15 @@ type Config struct {
 	EntryOverride []string // optional: override the image's entrypoint for tests (nil = default)
 	CPUs          string   // e.g. "2"
 	MemoryMB      int      // e.g. 2048
+	PidsLimit     int      // max processes in the container (0 = adapter default)
 	WorkDirHost   string   // host directory where per-job workspaces are created (e.g. /var/lib/delegator/work)
+	// MaxJobDuration bounds a single container's run time. After it elapses the
+	// container is killed and the job reported as failed. 0 = adapter default.
+	MaxJobDuration time.Duration
 }
+
+// logTailBytes is how much of the tail of the log we keep for the webhook payload.
+const logTailBytes = 8 << 10 // 8 KiB
 
 type Runner struct {
 	cfg Config
@@ -30,7 +39,13 @@ func New(cfg Config) *Runner {
 	if cfg.WorkDirHost == "" {
 		cfg.WorkDirHost = filepath.Join(os.TempDir(), "agentic-delegator")
 	}
-	_ = os.MkdirAll(cfg.WorkDirHost, 0o755)
+	if cfg.PidsLimit == 0 {
+		cfg.PidsLimit = 512
+	}
+	if cfg.MaxJobDuration == 0 {
+		cfg.MaxJobDuration = 30 * time.Minute
+	}
+	_ = os.MkdirAll(cfg.WorkDirHost, 0o700)
 	return &Runner{cfg: cfg}
 }
 
@@ -40,11 +55,18 @@ var _ ports.RunnerService = (*Runner)(nil)
 // callback fires from the supervisor goroutine after the container exits.
 func (r *Runner) Start(ctx context.Context, spec ports.RunnerStartSpec, onComplete func(ports.RunnerResult)) (string, error) {
 	jobDir := filepath.Join(r.cfg.WorkDirHost, string(spec.JobID))
-	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+	if err := os.MkdirAll(jobDir, 0o700); err != nil {
 		return "", err
 	}
 
 	args := []string{"run", "-d",
+		// Isolation hardening: drop all Linux capabilities, forbid privilege
+		// escalation, and cap the process count. Network is intentionally left
+		// enabled — the runner must clone, call the Anthropic API, and open a PR;
+		// egress restriction belongs at the host firewall layer.
+		"--cap-drop=ALL",
+		"--security-opt", "no-new-privileges",
+		"--pids-limit", fmt.Sprintf("%d", r.cfg.PidsLimit),
 		"-e", "JOB_ID=" + string(spec.JobID),
 		"-e", "REPO=" + spec.Repo,
 		"-e", "BASE_BRANCH=" + spec.BaseBranch,
@@ -79,12 +101,21 @@ func (r *Runner) Start(ctx context.Context, spec ports.RunnerStartSpec, onComple
 	return containerID, nil
 }
 
-func (r *Runner) supervise(containerID, jobDir, logPath string, jobID interface{}, onComplete func(ports.RunnerResult)) {
-	// 1. Wait for the container to finish, then stream logs to logPath.
-	// docker wait blocks until the container exits.
-	_ = exec.Command("docker", "wait", containerID).Run()
+func (r *Runner) supervise(containerID, jobDir, logPath string, jobID domain.JobID, onComplete func(ports.RunnerResult)) {
+	// 1. Wait for the container to finish (bounded by MaxJobDuration), then
+	// stream logs to logPath. If the deadline elapses we kill the container and
+	// fall through with a non-zero exit so the job is marked failed.
+	timedOut := false
+	waitCtx, cancel := context.WithTimeout(context.Background(), r.cfg.MaxJobDuration)
+	defer cancel()
+	if err := exec.CommandContext(waitCtx, "docker", "wait", containerID).Run(); err != nil {
+		if waitCtx.Err() == context.DeadlineExceeded {
+			timedOut = true
+			_ = exec.Command("docker", "kill", containerID).Run()
+		}
+	}
 
-	logFile, err := os.Create(logPath)
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err == nil {
 		defer logFile.Close()
 		logsCmd := exec.Command("docker", "logs", containerID)
@@ -93,29 +124,37 @@ func (r *Runner) supervise(containerID, jobDir, logPath string, jobID interface{
 		_ = logsCmd.Run()
 	}
 
-	// 2. Get the exit code
-	exitOut, _ := exec.Command("docker", "inspect", "--format", "{{.State.ExitCode}}", containerID).Output()
+	// 2. Get the exit code.
 	exitCode := 0
-	_, _ = fmt.Sscanf(strings.TrimSpace(string(exitOut)), "%d", &exitCode)
-
-	// 3. Remove the container now that we've extracted what we need.
-	_ = exec.Command("docker", "rm", "-f", containerID).Run()
-
-	// 3. Pick up PR URL if the runner wrote one
-	prURL := ""
-	if b, err := os.ReadFile(filepath.Join(jobDir, ".pr-url")); err == nil {
-		prURL = strings.TrimSpace(string(b))
+	if timedOut {
+		exitCode = 124 // conventional timeout exit code
+	} else {
+		exitOut, _ := exec.Command("docker", "inspect", "--format", "{{.State.ExitCode}}", containerID).Output()
+		_, _ = fmt.Sscanf(strings.TrimSpace(string(exitOut)), "%d", &exitCode)
 	}
+
+	// 3. Pick up artifacts the runner wrote before we tear the workspace down.
+	prURL := readTrimmed(filepath.Join(jobDir, ".pr-url"))
+	notifyURL := readTrimmed(filepath.Join(jobDir, ".notification-webhook"))
+	logTail := tailFile(logPath, logTailBytes)
+
+	// 4. Remove the container and its workspace now that we've extracted
+	// everything we need.
+	_ = exec.Command("docker", "rm", "-f", containerID).Run()
+	_ = os.RemoveAll(jobDir)
 
 	res := ports.RunnerResult{
-		ExitCode: exitCode,
-		PRURL:    prURL,
+		JobID:               jobID,
+		ExitCode:            exitCode,
+		PRURL:               prURL,
+		NotificationWebhook: notifyURL,
+		LogTail:             logTail,
 	}
-	if exitCode != 0 {
+	switch {
+	case timedOut:
+		res.Error = fmt.Sprintf("runner exceeded max duration %s", r.cfg.MaxJobDuration)
+	case exitCode != 0:
 		res.Error = fmt.Sprintf("runner exited with code %d", exitCode)
-	}
-	if jid, ok := jobID.(interface{ String() string }); ok {
-		_ = jid
 	}
 
 	if onComplete != nil {
@@ -135,4 +174,27 @@ func (r *Runner) Inspect(ctx context.Context, containerID string) (bool, error) 
 func (r *Runner) Stop(ctx context.Context, containerID string) error {
 	_ = exec.CommandContext(ctx, "docker", "kill", containerID).Run()
 	return nil
+}
+
+func readTrimmed(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// tailFile returns the last max bytes of the file, starting at a line boundary.
+func tailFile(path string, max int) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	if len(b) > max {
+		b = b[len(b)-max:]
+		if i := strings.IndexByte(string(b), '\n'); i >= 0 && i+1 < len(b) {
+			b = b[i+1:]
+		}
+	}
+	return string(b)
 }

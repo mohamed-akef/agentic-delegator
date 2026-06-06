@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"agentic-delegator/core/domain"
 	"agentic-delegator/core/usecase"
 )
 
@@ -30,7 +31,17 @@ func (h *SettingsHandler) SetAnthropic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.setAnthropic.Execute(r.Context(), usecase.SetAnthropicCredentialsInput{UserID: uid, APIKey: body.APIKey}); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		writeDomainError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// RevokeAPIKey handles DELETE /settings/api-keys/{id}.
+func (h *SettingsHandler) RevokeAPIKey(w http.ResponseWriter, r *http.Request, id string) {
+	uid, _ := UserFromContext(r.Context())
+	if err := h.revoke.Execute(r.Context(), usecase.RevokeAPIKeyInput{ID: domain.APIKeyID(id), UserID: uid}); err != nil {
+		writeDomainError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -48,7 +59,7 @@ func (h *SettingsHandler) MintAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := h.mint.Execute(r.Context(), usecase.MintAPIKeyInput{UserID: uid, Name: body.Name})
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		writeDomainError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{

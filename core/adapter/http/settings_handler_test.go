@@ -24,7 +24,7 @@ func newSettingsRouter(t *testing.T) (http.Handler, *testutil.FakeSecretsRepo, *
 
 	r := adhttp.NewRouter(adhttp.Deps{
 		Resolver:        stubResolver{uid: "u_1"},
-		JobsHandler:     adhttp.NewJobsHandler(nil, nil, nil), // not exercised
+		JobsHandler:     adhttp.NewJobsHandler(nil, nil, nil, nil), // not exercised
 		SettingsHandler: adhttp.NewSettingsHandler(setA, mint, rev),
 	})
 	return r, secrets, keys

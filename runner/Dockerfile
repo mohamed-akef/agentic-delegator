@@ -10,6 +10,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl git jq gnupg \
  && rm -rf /var/lib/apt/lists/*
 
+# yq — parses the target repo's .agentic-delegator.yml in the entrypoint
+RUN curl -fsSL "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_$(dpkg --print-architecture)" \
+      -o /usr/local/bin/yq \
+ && chmod +x /usr/local/bin/yq
+
 # gh CLI from official repo
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | tee /usr/share/keyrings/githubcli-archive-keyring.gpg >/dev/null \
  && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \

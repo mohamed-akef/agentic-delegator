@@ -11,6 +11,10 @@ import (
 type HandleRunnerCompletion struct {
 	Jobs  ports.JobsRepository
 	Clock ports.Clock
+
+	// Webhook is optional. When set and the runner reported a notification
+	// webhook URL, the completion is dispatched after the job is persisted.
+	Webhook *DispatchCompletionWebhook
 }
 
 func (uc *HandleRunnerCompletion) Execute(ctx context.Context, res ports.RunnerResult) error {
@@ -37,5 +41,18 @@ func (uc *HandleRunnerCompletion) Execute(ctx context.Context, res ports.RunnerR
 			return err
 		}
 	}
-	return uc.Jobs.Update(ctx, job)
+	if err := uc.Jobs.Update(ctx, job); err != nil {
+		return err
+	}
+
+	// Fire the completion webhook if the repo configured one. Delivery failures
+	// are non-fatal: the job state is already persisted and authoritative.
+	if uc.Webhook != nil && res.NotificationWebhook != "" {
+		_ = uc.Webhook.Execute(ctx, DispatchCompletionWebhookInput{
+			URL:     res.NotificationWebhook,
+			Job:     job,
+			LogTail: res.LogTail,
+		})
+	}
+	return nil
 }
