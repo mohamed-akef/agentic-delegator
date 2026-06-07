@@ -5,11 +5,19 @@ set -euo pipefail
 : "${REPO:?REPO required}"
 : "${BASE_BRANCH:?BASE_BRANCH required}"
 : "${WORK_BRANCH:?WORK_BRANCH required}"
-: "${GH_TOKEN:?GH_TOKEN required}"
-: "${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY required}"
 : "${SPEC_TYPE:?SPEC_TYPE required}"
 : "${SPEC_VALUE:?SPEC_VALUE required}"
 MODEL_OVERRIDE="${MODEL_OVERRIDE:-}"
+
+# Secrets are delivered via a read-only bind mount, not -e env vars. Fail fast
+# if the mount is absent (e.g. an orchestrator too old to provide it).
+SECRETS_DIR=/run/delegator-secrets
+GH_TOKEN_FILE="$SECRETS_DIR/gh-token"
+ANTHROPIC_KEY_FILE="$SECRETS_DIR/anthropic-key"
+if ! { [ -r "$GH_TOKEN_FILE" ] && [ -r "$ANTHROPIC_KEY_FILE" ]; }; then
+    echo "[delegator] missing secrets mount at $SECRETS_DIR (is the orchestrator new enough?)" >&2
+    exit 3
+fi
 
 cd /workspace
 
@@ -17,9 +25,35 @@ cd /workspace
 git config --global user.email "agentic-delegator@local"
 git config --global user.name "agentic-delegator"
 
+# git auth via a transient GIT_ASKPASS that reads the token file on demand, so
+# the token never enters the clone URL or .git/config. credential.helper=""
+# disables any on-disk credential store. GIT_ASKPASS is inherited by the
+# subsequent fetch / checkout / push.
+cat > /tmp/askpass.sh <<EOF
+#!/usr/bin/env bash
+case "\$1" in
+    *Username*) printf '%s' "x-access-token" ;;
+    *Password*) printf '%s' "\$(cat "$GH_TOKEN_FILE")" ;;
+esac
+EOF
+chmod 0700 /tmp/askpass.sh
+export GIT_ASKPASS=/tmp/askpass.sh
+git config --global credential.helper ""
+
 echo "[delegator] cloning $REPO …"
-git clone "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" repo
+git clone "https://github.com/${REPO}.git" repo
 cd repo
+
+# Authenticate gh from the token file — used by the agent's `gh pr create` and
+# the safety-net `gh pr view` below. GH_TOKEN/GITHUB_TOKEN must be unset: when
+# present they take precedence and bypass the stored credential. Fail fast — gh
+# validates the token against api.github.com, and a 401 here would otherwise
+# leave every later gh command silently unauthenticated.
+unset GH_TOKEN GITHUB_TOKEN
+if ! gh auth login --git-protocol https --hostname github.com --with-token < "$GH_TOKEN_FILE"; then
+    echo "[delegator] gh auth login failed" >&2
+    exit 4
+fi
 
 # Either continue an existing branch (fetch + checkout) OR create from base.
 if git fetch origin "${WORK_BRANCH}" 2>/dev/null && git rev-parse --verify "origin/${WORK_BRANCH}" >/dev/null 2>&1; then
@@ -52,9 +86,20 @@ fi
 # Resolve the spec to a single string we feed to Claude.
 case "${SPEC_TYPE}" in
     inline) SPEC_TEXT="${SPEC_VALUE}" ;;
-    path)   SPEC_TEXT="$(cat "${SPEC_VALUE}")" ;;
+    path)
+        # Constrain SPEC_TYPE=path to within the cloned repo: reject absolute
+        # paths, ".." traversal, and symlink escape — otherwise a job submitter
+        # could read the mounted secrets (e.g. /run/delegator-secrets/gh-token)
+        # straight into the prompt. cwd is the repo root here.
+        repo_root="$(pwd -P)"
+        resolved="$(realpath -m -- "${SPEC_VALUE}" 2>/dev/null || true)"
+        case "${resolved}/" in
+            "${repo_root}/"*) SPEC_TEXT="$(cat "${resolved}")" ;;
+            *) echo "[delegator] SPEC_TYPE=path must resolve inside the repo: ${SPEC_VALUE}" >&2; exit 5 ;;
+        esac
+        ;;
     url)    SPEC_TEXT="$(curl -fsSL "${SPEC_VALUE}")" ;;
-    *)      echo "unknown SPEC_TYPE: ${SPEC_TYPE}"; exit 2 ;;
+    *)      echo "unknown SPEC_TYPE: ${SPEC_TYPE}" >&2; exit 2 ;;
 esac
 
 PROMPT="$(cat <<EOF
@@ -81,7 +126,9 @@ CLAUDE_ARGS=(--dangerously-skip-permissions --print)
 
 echo "[delegator] running claude…"
 set +e
-GH_TOKEN="${GH_TOKEN}" claude "${CLAUDE_ARGS[@]}" "${PROMPT}"
+# Anthropic key is exported only into the claude process environment (gone from
+# docker inspect); read from the mounted file at exec time.
+ANTHROPIC_API_KEY="$(cat "$ANTHROPIC_KEY_FILE")" claude "${CLAUDE_ARGS[@]}" "${PROMPT}"
 RC=$?
 set -e
 

@@ -24,6 +24,7 @@ func TestDockerRunner_helloWorldExitsZero(t *testing.T) {
 		EntryOverride: []string{"sh", "-c", `echo "hello $JOB_ID"; mkdir -p /workspace && echo "https://example/pr/1" > /workspace/.pr-url; exit 0`},
 		CPUs:          "0.5",
 		MemoryMB:      256,
+		WorkDirHost:   tmpDir,
 	})
 
 	done := make(chan ports.RunnerResult, 1)
@@ -57,6 +58,12 @@ func TestDockerRunner_helloWorldExitsZero(t *testing.T) {
 		}
 	case <-time.After(30 * time.Second):
 		t.Fatalf("runner did not complete in 30s")
+	}
+
+	// The per-job secrets dir must be cleaned up once the job completes.
+	secretsDir := filepath.Join(tmpDir, "j_test_1.secrets")
+	if _, err := os.Stat(secretsDir); !os.IsNotExist(err) {
+		t.Fatalf("secrets dir not cleaned up after completion: %s (err=%v)", secretsDir, err)
 	}
 
 	logBytes, err := os.ReadFile(logPath)

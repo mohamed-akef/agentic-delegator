@@ -2,6 +2,7 @@
 package docker
 
 import (
+	"strings"
 	"testing"
 
 	"agentic-delegator/core/domain"
@@ -40,7 +41,7 @@ func testSpec() ports.RunnerStartSpec {
 
 func TestBuildRunArgs_noNetwork_omitsNetworkAndDNS(t *testing.T) {
 	cfg := Config{Image: "runner:dev", DNS: []string{"1.1.1.1", "1.0.0.1"}} // Network == ""
-	args := buildRunArgs(cfg, testSpec(), "/work/j1")
+	args := buildRunArgs(cfg, testSpec(), "/work/j1", "/work/j1.secrets")
 
 	if indexOfArg(args, "--network") != -1 {
 		t.Fatalf("--network must be absent when Network==\"\": %v", args)
@@ -55,7 +56,7 @@ func TestBuildRunArgs_noNetwork_omitsNetworkAndDNS(t *testing.T) {
 
 func TestBuildRunArgs_withNetwork_addsFlagsBeforeImage(t *testing.T) {
 	cfg := Config{Image: "runner:dev", Network: "runner-net", DNS: []string{"1.1.1.1", "1.0.0.1"}}
-	args := buildRunArgs(cfg, testSpec(), "/work/j1")
+	args := buildRunArgs(cfg, testSpec(), "/work/j1", "/work/j1.secrets")
 
 	if !hasFlagValue(args, "--network", "runner-net") {
 		t.Fatalf("missing --network runner-net: %v", args)
@@ -77,7 +78,7 @@ func TestBuildRunArgs_withNetwork_addsFlagsBeforeImage(t *testing.T) {
 
 func TestBuildRunArgs_imageImmediatelyBeforeEntryOverride(t *testing.T) {
 	cfg := Config{Image: "runner:dev", Network: "runner-net", DNS: []string{"1.1.1.1"}, EntryOverride: []string{"sh", "-c", "echo hi"}}
-	args := buildRunArgs(cfg, testSpec(), "/work/j1")
+	args := buildRunArgs(cfg, testSpec(), "/work/j1", "/work/j1.secrets")
 
 	img := indexOfArg(args, "runner:dev")
 	if img == -1 || img != len(args)-1-len(cfg.EntryOverride) {
@@ -88,9 +89,30 @@ func TestBuildRunArgs_imageImmediatelyBeforeEntryOverride(t *testing.T) {
 	}
 }
 
+func TestBuildRunArgs_secretsMountAndNoSecretEnv(t *testing.T) {
+	cfg := Config{Image: "runner:dev"}
+	args := buildRunArgs(cfg, testSpec(), "/work/j1", "/work/j1.secrets")
+
+	if !hasFlagValue(args, "-v", "/work/j1.secrets:/run/delegator-secrets:ro") {
+		t.Fatalf("read-only secrets mount missing: %v", args)
+	}
+	for _, a := range args {
+		if strings.HasPrefix(a, "GH_TOKEN=") || strings.HasPrefix(a, "ANTHROPIC_API_KEY=") {
+			t.Fatalf("secrets must NOT be passed as -e env (visible to docker inspect): found %q", a)
+		}
+	}
+	// Non-secret env must remain.
+	if !hasFlagValue(args, "-e", "JOB_ID=j1") {
+		t.Fatalf("JOB_ID env should remain: %v", args)
+	}
+	if !hasFlagValue(args, "-e", "REPO=owner/repo") {
+		t.Fatalf("REPO env should remain: %v", args)
+	}
+}
+
 func TestBuildRunArgs_alwaysHasHardeningAndWorkspaceMount(t *testing.T) {
 	cfg := Config{Image: "runner:dev"}
-	args := buildRunArgs(cfg, testSpec(), "/work/j1")
+	args := buildRunArgs(cfg, testSpec(), "/work/j1", "/work/j1.secrets")
 
 	if indexOfArg(args, "--cap-drop=ALL") == -1 {
 		t.Fatalf("--cap-drop=ALL must always be present: %v", args)
