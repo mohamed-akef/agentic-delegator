@@ -1,0 +1,18 @@
+# deploy/firewall/runner-egress-firewall.service
+# Applies the runner egress DROP rules at boot, after dockerd (so the
+# DOCKER-USER chain exists). Docker preserves DOCKER-USER rule contents across a
+# daemon restart, so this only needs to run on (re)boot — RemainAfterExit keeps
+# the unit "active" so dependents can order after it.
+[Unit]
+Description=Agentic Delegator runner egress firewall (Layer 1)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/runner-egress-firewall.sh up
+ExecStop=/usr/local/sbin/runner-egress-firewall.sh down
+
+[Install]
+WantedBy=multi-user.target

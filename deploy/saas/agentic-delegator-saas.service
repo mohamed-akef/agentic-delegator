@@ -1,8 +1,8 @@
 # deploy/saas/agentic-delegator-saas.service
 [Unit]
 Description=Agentic Delegator (SaaS)
-After=network-online.target docker.service
-Wants=network-online.target
+After=network-online.target docker.service runner-egress-firewall.service
+Wants=network-online.target runner-egress-firewall.service
 
 [Service]
 Type=simple

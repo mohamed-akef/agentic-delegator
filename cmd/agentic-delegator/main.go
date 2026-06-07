@@ -85,10 +85,16 @@ func runServe(cfg *config.Config, db *bun.DB) {
 	apiKeys := keyhash.New(postgres.NewAPIKeysRepo(db))
 	usersBootstrap := postgres.NewUsersBootstrapRepo(db)
 
+	// Fail fast if egress filtering was opted into (AGENTIC_RUNNER_NETWORK set)
+	// but the network is absent — better than silently running unfiltered.
+	must("runner network preflight", docker.PreflightNetwork(ctx, cfg.RunnerNetwork))
+
 	runner := docker.New(docker.Config{
 		Image:          cfg.RunnerImage,
 		CPUs:           "2",
 		MemoryMB:       2048,
+		Network:        cfg.RunnerNetwork,
+		DNS:            cfg.RunnerDNS,
 		WorkDirHost:    cfg.WorkDirHost,
 		MaxJobDuration: cfg.MaxJobDuration,
 	})

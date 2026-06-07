@@ -21,6 +21,8 @@ type Config struct {
 	CPUs          string   // e.g. "2"
 	MemoryMB      int      // e.g. 2048
 	PidsLimit     int      // max processes in the container (0 = adapter default)
+	Network       string   // runner bridge network for egress filtering; "" => no --network
+	DNS           []string // public DNS resolvers; emitted as --dns only when Network != ""
 	WorkDirHost   string   // host directory where per-job workspaces are created (e.g. /var/lib/delegator/work)
 	// MaxJobDuration bounds a single container's run time. After it elapses the
 	// container is killed and the job reported as failed. 0 = adapter default.
@@ -46,6 +48,10 @@ func New(cfg Config) *Runner {
 		cfg.MaxJobDuration = 30 * time.Minute
 	}
 	_ = os.MkdirAll(cfg.WorkDirHost, 0o700)
+	// MkdirAll is umask-subject and does not tighten a pre-existing dir, so chmod
+	// explicitly: WorkDirHost is the host-exposure gate for the world-traversable
+	// per-job dirs (0777 workspace, 0711 secrets) created under it.
+	_ = os.Chmod(cfg.WorkDirHost, 0o700)
 	return &Runner{cfg: cfg}
 }
 
@@ -70,35 +76,7 @@ func (r *Runner) Start(ctx context.Context, spec ports.RunnerStartSpec, onComple
 		return "", err
 	}
 
-	args := []string{"run", "-d",
-		// Isolation hardening: drop all Linux capabilities, forbid privilege
-		// escalation, and cap the process count. Network is intentionally left
-		// enabled — the runner must clone, call the Anthropic API, and open a PR;
-		// egress restriction belongs at the host firewall layer.
-		"--cap-drop=ALL",
-		"--security-opt", "no-new-privileges",
-		"--pids-limit", fmt.Sprintf("%d", r.cfg.PidsLimit),
-		"-e", "JOB_ID=" + string(spec.JobID),
-		"-e", "REPO=" + spec.Repo,
-		"-e", "BASE_BRANCH=" + spec.BaseBranch,
-		"-e", "WORK_BRANCH=" + spec.WorkBranch,
-		"-e", "GH_TOKEN=" + spec.GitCreds.Token,
-		"-e", "ANTHROPIC_API_KEY=" + spec.Anthropic.APIKey,
-		"-e", "MODEL_OVERRIDE=" + spec.Model,
-		"-e", "SPEC_TYPE=" + string(spec.Spec.Type),
-		"-e", "SPEC_VALUE=" + spec.Spec.Value,
-		"-v", jobDir + ":/workspace",
-	}
-	if r.cfg.CPUs != "" {
-		args = append(args, "--cpus", r.cfg.CPUs)
-	}
-	if r.cfg.MemoryMB > 0 {
-		args = append(args, "--memory", fmt.Sprintf("%dm", r.cfg.MemoryMB))
-	}
-	args = append(args, r.cfg.Image)
-	if len(r.cfg.EntryOverride) > 0 {
-		args = append(args, r.cfg.EntryOverride...)
-	}
+	args := buildRunArgs(r.cfg, spec, jobDir)
 
 	out, err := exec.CommandContext(ctx, "docker", args...).Output()
 	if err != nil {
@@ -110,6 +88,50 @@ func (r *Runner) Start(ctx context.Context, spec ports.RunnerStartSpec, onComple
 	go r.supervise(containerID, jobDir, spec.LogPath, spec.JobID, onComplete)
 
 	return containerID, nil
+}
+
+// buildRunArgs constructs the full `docker run` argument list for one job. It is
+// pure (no side effects) so the flag composition can be unit-tested without a
+// docker daemon. Image must remain the last non-EntryOverride argument.
+//
+// Egress to private/link-local/metadata ranges is blocked at the host
+// DOCKER-USER firewall layer (keyed on the runner bridge subnet); public egress
+// is intentionally allowed (clone, Anthropic API, PR). The --network/--dns flags
+// are emitted only when a runner network is configured; dev/local/CI leave it
+// empty and run unfiltered, exactly as before.
+func buildRunArgs(cfg Config, spec ports.RunnerStartSpec, jobDir string) []string {
+	args := []string{"run", "-d",
+		// Isolation hardening: drop all Linux capabilities, forbid privilege
+		// escalation, and cap the process count.
+		"--cap-drop=ALL",
+		"--security-opt", "no-new-privileges",
+		"--pids-limit", fmt.Sprintf("%d", cfg.PidsLimit),
+		"-e", "JOB_ID=" + string(spec.JobID),
+		"-e", "REPO=" + spec.Repo,
+		"-e", "BASE_BRANCH=" + spec.BaseBranch,
+		"-e", "WORK_BRANCH=" + spec.WorkBranch,
+		"-e", "GH_TOKEN=" + spec.GitCreds.Token,
+		"-e", "ANTHROPIC_API_KEY=" + spec.Anthropic.APIKey,
+		"-e", "MODEL_OVERRIDE=" + spec.Model,
+		"-e", "SPEC_TYPE=" + string(spec.Spec.Type),
+		"-e", "SPEC_VALUE=" + spec.Spec.Value,
+		"-v", jobDir + ":/workspace",
+	}
+	if cfg.CPUs != "" {
+		args = append(args, "--cpus", cfg.CPUs)
+	}
+	if cfg.MemoryMB > 0 {
+		args = append(args, "--memory", fmt.Sprintf("%dm", cfg.MemoryMB))
+	}
+	if cfg.Network != "" {
+		args = append(args, "--network", cfg.Network)
+		for _, d := range cfg.DNS {
+			args = append(args, "--dns", d)
+		}
+	}
+	args = append(args, cfg.Image)
+	args = append(args, cfg.EntryOverride...)
+	return args
 }
 
 func (r *Runner) supervise(containerID, jobDir, logPath string, jobID domain.JobID, onComplete func(ports.RunnerResult)) {
