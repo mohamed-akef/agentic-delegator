@@ -68,28 +68,33 @@ docker network create \
 
 `DOCKER-USER` is jumped from `FORWARD` before Docker's own chains, evaluated top-to-bottom. Use **DROP, not REJECT** — black-holing (curl times out, exit 28) is the desired SSRF posture; REJECT leaks "host is filtering."
 
+> **Rules must be INSERTED, not appended.** Docker seeds `DOCKER-USER` with a single terminal `-A DOCKER-USER -j RETURN`. Any rule added with `-A` lands *after* that blanket RETURN and is never evaluated (a silent no-op — verified). So every custom rule is inserted with `-I DOCKER-USER 1`. The script inserts the DROPs first, then the established/related RETURN last, yielding this top-to-bottom order (DROPs sit above Docker's RETURN):
+
 ```
-# 0) Allow established/related return traffic for runner containers.
+# Final DOCKER-USER order (top to bottom). All inserted with `-I DOCKER-USER 1`.
+# 0) Allow established/related return traffic for the runner subnet (on top).
 #    Defensive hygiene only — with the destination-scoped DROPs below, return
 #    traffic (-s public -d 172.31.255.0/24) matches no DROP anyway. This rule
 #    becomes load-bearing if a broader/default-deny rule is ever added (Layer 2).
-iptables -I DOCKER-USER 1 -s 172.31.255.0/24 -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+-s 172.31.255.0/24 -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
 
 # 1) DROP egress from the runner subnet to private + link-local + metadata ranges.
-iptables -A DOCKER-USER -s 172.31.255.0/24 -d 10.0.0.0/8     -j DROP
-iptables -A DOCKER-USER -s 172.31.255.0/24 -d 172.16.0.0/12  -j DROP
-iptables -A DOCKER-USER -s 172.31.255.0/24 -d 192.168.0.0/16 -j DROP
-iptables -A DOCKER-USER -s 172.31.255.0/24 -d 169.254.0.0/16 -j DROP   # cloud metadata
+-s 172.31.255.0/24 -d 10.0.0.0/8     -j DROP
+-s 172.31.255.0/24 -d 172.16.0.0/12  -j DROP
+-s 172.31.255.0/24 -d 192.168.0.0/16 -j DROP
+-s 172.31.255.0/24 -d 169.254.0.0/16 -j DROP   # cloud metadata
 # 100.64.0.0/10 (CGNAT) is DROPPED OPTIONALLY — commented OFF by default because
 # some carrier-NAT / cloud setups use it for legitimate endpoints. Opt-in only.
-# iptables -A DOCKER-USER -s 172.31.255.0/24 -d 100.64.0.0/10 -j DROP
+# -s 172.31.255.0/24 -d 100.64.0.0/10 -j DROP
+
+#    ... below these sits Docker's own seeded `-j RETURN`.
 ```
 
 Notes:
 
 - The runner subnet is inside `172.16/12`, so that DROP also blocks **runner-to-runner** and **runner-to-gateway** (free L3 isolation between concurrent jobs; closes the gateway as SSRF surface). Intentional — do **not** add a `-d 172.31.255.0/24 -j RETURN` exception by default.
 - **No loopback rule.** The container's `127.0.0.11` embedded-DNS DNAT lives in the *container* netns, never in `DOCKER-USER` (host FORWARD); `169.254/16` is link-local, not loopback. Dropping it does not touch DNS.
-- **iptables vs nft:** on Debian 12 / Ubuntu 24.04 `iptables` is the nft shim, which Docker uses by default through Docker 28 and remains default on 29 (`docker info` → `Firewall Backend: iptables`). The installer MUST verify the backend is `iptables` and refuse/warn loudly otherwise — the experimental Docker 29+ `nftables` backend has **no** `DOCKER-USER` chain and these rules would silently no-op. **Use the right probe:** `docker info --format '{{.FirewallBackend}}'` renders the *struct* — `{iptables []}` on Docker 29.x (verified on a 29.5.2 host) — so a `[ "$(…)" = iptables ]` equality check falsely fails on every modern host. Either template the sub-field, `docker info --format '{{.FirewallBackend.Driver}}'` (→ bare `iptables`), or — preferred, since it is what actually load-bears — probe that the chain exists: `iptables -L -n DOCKER-USER >/dev/null 2>&1`.
+- **iptables vs nft:** on Debian 12 / Ubuntu 24.04 `iptables` is the nft shim, which Docker uses by default through Docker 28 and remains default on 29 (`docker info` → `Firewall Backend: iptables`). The installer MUST verify the backend is `iptables` and refuse/warn loudly otherwise — the experimental Docker 29+ `nftables` backend has **no** `DOCKER-USER` chain and these rules would silently no-op. **Use the right probe:** `docker info --format '{{.FirewallBackend}}'` renders the *struct* — `{iptables []}` on Docker 29.x (verified on a 29.5.2 host) — so a `[ "$(…)" = iptables ]` equality check falsely fails on every modern host. Either template the sub-field, `docker info --format '{{.FirewallBackend.Driver}}'` (→ bare `iptables`), or — preferred, since it is what actually load-bears — probe that the chain exists with `iptables -S DOCKER-USER >/dev/null 2>&1`. (Use `-S`, not `iptables -L -n DOCKER-USER`: the nft shim, v1.8+, rejects `-L -n <chain>` with "Bad argument" because `-L`'s optional chain arg must directly follow it — verified.)
 
 ### DNS
 
@@ -140,7 +145,7 @@ RunnerDNS     []string // AGENTIC_RUNNER_DNS, comma-separated, default "1.1.1.1,
 
 Under a **new `deploy/firewall/` directory**:
 
-- **`runner-egress-firewall.sh`** — idempotent root script: create `runner-net` if absent (pinned subnet/bridge/masquerade), verify the docker firewall backend is `iptables` (via `iptables -L -n DOCKER-USER` existence probe, **not** a `{{.FirewallBackend}}` string-equality — see the iptables-vs-nft note above), then apply the `DOCKER-USER` rules idempotently. Hardcodes `SUBNET=172.31.255.0/24`, `BR=br-runner`. Supports `up` (default) / `down` (remove rules, optionally the network).
+- **`runner-egress-firewall.sh`** — idempotent root script: create `runner-net` if absent (pinned subnet/bridge/masquerade), verify the docker firewall backend is `iptables` (via `iptables -S DOCKER-USER` existence probe, **not** a `{{.FirewallBackend}}` string-equality — see the iptables-vs-nft note above), then **insert** (not append — Docker seeds a terminal `-j RETURN`) the `DOCKER-USER` rules idempotently. Hardcodes `SUBNET=172.31.255.0/24`, `BR=br-runner`. Supports `up` (default) / `down` (remove rules, optionally the network).
 - **`egress-filter.rules`** — canonical rule list (the DROP CIDRs + leading RETURN, CGNAT commented off, plus a commented IPv6 mirror for operators who enable v6). Documentation + sourced by the script.
 - **`runner-egress-firewall.service`** — systemd oneshot, `After=docker.service Requires=docker.service`, `Type=oneshot RemainAfterExit=yes`, `ExecStart=/usr/local/sbin/runner-egress-firewall.sh up`, `WantedBy=multi-user.target`.
 
@@ -330,7 +335,7 @@ DROP (timeout, exit 28) vs REJECT (instant refused) matters — a `200` to metad
 2. **WorkDirHost moved out of `PrivateTmp`** to `/var/lib/agentic-delegator/work` via the deploy env — this is a **prod-blocking precondition**, not a tidy-up: under the shipped unit the artifact round-trip is currently broken (see [Prerequisite](#prerequisite-blocking--applies-to-both-parts-workdirhost-must-be-outside-privatetmp)). Lands first; `New()` also gains an explicit `os.Chmod(WorkDirHost, 0o700)`. **OPEN:** confirm the path `/var/lib/agentic-delegator/work`.
 3. **Secret delivery = read-only bind-mounted sibling dir** (`<jobID>.secrets`); files `0644`, **dir `0711`** (search-only — *the draft's `0700` is a verified blocker that makes the secrets unreadable by the non-root runner*); host exposure gated by the `0700` `WorkDirHost` parent; no tmpfs, no copy-in, no `shred`.
 4. **git auth = inline `GIT_ASKPASS` + `credential.helper=""`** (no helper file, no `git-credential-store`); **gh auth = `gh auth login --with-token`** with fail-fast on its exit.
-5. **Firewall = new `deploy/firewall/` dir + dedicated root systemd oneshot**, with a **new `deploy/saas/install.sh`** (or documented manual steps) that actually installs/enables the unit + script — shipping files in the tarball is not installing them. One script name throughout (`runner-egress-firewall.sh`); backend check via the `iptables -L DOCKER-USER` probe, not `{{.FirewallBackend}}` string-equality. The unprivileged SaaS unit only orders after the oneshot (weak `Wants=`, so enabling it is mandatory in prod).
+5. **Firewall = new `deploy/firewall/` dir + dedicated root systemd oneshot**, with a **new `deploy/saas/install.sh`** (or documented manual steps) that actually installs/enables the unit + script — shipping files in the tarball is not installing them. One script name throughout (`runner-egress-firewall.sh`); backend check via the `iptables -S DOCKER-USER` probe, not `{{.FirewallBackend}}` string-equality; rules **inserted** (`-I`) above Docker's seeded RETURN, not appended. The unprivileged SaaS unit only orders after the oneshot (weak `Wants=`, so enabling it is mandatory in prod).
 6. **DROP not REJECT; no loopback rule; DROP covers the runner subnet itself** (gateway intentionally unreachable); **CGNAT `100.64/10` DROP off by default** (opt-in).
 7. **Reattach leak handled by a startup orphan sweep** of non-running jobs' `*.secrets` dirs (glob scoped so the `logs/` sibling never matches); jobs still running across a restart retain their secrets dir until completion/next sweep (documented residual).
 8. **`SPEC_TYPE=path` containment is in-scope** (not a deferred residual): resolve repo-relative after clone and reject escape, closing the one-line read of the just-mounted secret.

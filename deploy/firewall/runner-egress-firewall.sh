@@ -32,7 +32,11 @@ require_root() {
 # firewall backend. Docker 29's experimental nftables backend has no such chain
 # and these rules would silently no-op — refuse rather than fail open.
 assert_docker_user_chain() {
-  iptables -L -n DOCKER-USER >/dev/null 2>&1 || {
+  # Use -S (rule-spec listing) with the chain immediately after the flag: the
+  # nft-backed iptables (v1.8+, the default on Debian 12 / Ubuntu 24.04) rejects
+  # `-L -n DOCKER-USER` ("Bad argument") because -L's optional chain arg must
+  # directly follow it. -S DOCKER-USER is unambiguous on both backends.
+  iptables -S DOCKER-USER >/dev/null 2>&1 || {
     echo "DOCKER-USER chain not found — Docker must use the iptables firewall backend." >&2
     echo "(Docker 29 nftables backend has no DOCKER-USER chain; these rules would no-op.)" >&2
     exit 1
@@ -52,9 +56,11 @@ ensure_network() {
   fi
 }
 
-# add_rule appends a DOCKER-USER rule iff not already present (idempotent).
-add_rule() {
-  iptables -C DOCKER-USER "$@" 2>/dev/null || iptables -A DOCKER-USER "$@"
+# ins_rule inserts a DOCKER-USER rule at the TOP iff not already present
+# (idempotent). It MUST be insert, not append: Docker seeds DOCKER-USER with a
+# terminal `-j RETURN`, so an appended rule lands after it and never matches.
+ins_rule() {
+  iptables -C DOCKER-USER "$@" 2>/dev/null || iptables -I DOCKER-USER 1 "$@"
 }
 
 # del_rule removes every copy of a DOCKER-USER rule (idempotent).
@@ -69,21 +75,26 @@ up() {
   ensure_network
   assert_docker_user_chain
 
-  # 0) Allow established/related return traffic for the runner subnet, inserted
-  #    at the top. Currently redundant with the destination-scoped DROPs below
-  #    (return traffic is -s public -d subnet and matches no DROP), but becomes
+  # All rules are INSERTED at position 1 (above Docker's default terminal
+  # `-j RETURN`). We insert the DROPs first, then the RETURN last, so the final
+  # top-to-bottom order is: [established-RETURN, DROPs…, Docker's RETURN].
+
+  # 1) DROP egress from the runner subnet to private/link-local/metadata ranges.
+  local cidr
+  for cidr in "${DROP_CIDRS[@]}"; do
+    ins_rule -s "$SUBNET" -d "$cidr" -j DROP
+  done
+
+  # 0) Allow established/related return traffic for the runner subnet, on top.
+  #    Currently redundant with the destination-scoped DROPs above (return
+  #    traffic is -s public -d subnet and matches no DROP), but becomes
   #    load-bearing if a broader default-deny is ever added (Layer 2).
   # SC2054: the comma in ESTABLISHED,RELATED is iptables conntrack syntax, not
   # an array separator — the array elements are space-separated as required.
   # shellcheck disable=SC2054
   local ret=(-s "$SUBNET" -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN)
-  iptables -C DOCKER-USER "${ret[@]}" 2>/dev/null || iptables -I DOCKER-USER 1 "${ret[@]}"
+  ins_rule "${ret[@]}"
 
-  # 1) DROP egress from the runner subnet to private/link-local/metadata ranges.
-  local cidr
-  for cidr in "${DROP_CIDRS[@]}"; do
-    add_rule -s "$SUBNET" -d "$cidr" -j DROP
-  done
   echo "[firewall] applied DOCKER-USER egress DROP rules for $SUBNET"
 }
 
