@@ -62,6 +62,7 @@ var _ ports.RunnerService = (*Runner)(nil)
 func (r *Runner) Start(ctx context.Context, spec ports.RunnerStartSpec, onComplete func(ports.RunnerResult)) (string, error) {
 	jobDir := filepath.Join(r.cfg.WorkDirHost, string(spec.JobID))
 	if err := os.MkdirAll(jobDir, 0o777); err != nil {
+		_ = os.RemoveAll(jobDir)
 		return "", err
 	}
 	// The container runs as root (uid 0) but, under --cap-drop=ALL, lacks
@@ -73,19 +74,32 @@ func (r *Runner) Start(ctx context.Context, spec ports.RunnerStartSpec, onComple
 	// this per-job dir is not reachable by other host users, and it is removed
 	// when the job completes.
 	if err := os.Chmod(jobDir, 0o777); err != nil {
+		_ = os.RemoveAll(jobDir)
 		return "", err
 	}
 
-	args := buildRunArgs(r.cfg, spec, jobDir)
+	// Secrets are delivered via a read-only bind-mounted sibling dir, not -e env.
+	secretsDir, err := writeSecrets(r.cfg.WorkDirHost, string(spec.JobID), spec.GitCreds.Token, spec.Anthropic.APIKey)
+	if err != nil {
+		_ = os.RemoveAll(jobDir)
+		_ = os.RemoveAll(secretsDir)
+		return "", err
+	}
+
+	args := buildRunArgs(r.cfg, spec, jobDir, secretsDir)
 
 	out, err := exec.CommandContext(ctx, "docker", args...).Output()
 	if err != nil {
+		// supervise never runs if docker run fails, so clean both dirs here
+		// (no plaintext tokens left on disk).
+		_ = os.RemoveAll(jobDir)
+		_ = os.RemoveAll(secretsDir)
 		return "", fmt.Errorf("docker run: %w", err)
 	}
 	containerID := strings.TrimSpace(string(out))
 
 	// Supervise the container in a goroutine.
-	go r.supervise(containerID, jobDir, spec.LogPath, spec.JobID, onComplete)
+	go r.supervise(containerID, jobDir, secretsDir, spec.LogPath, spec.JobID, onComplete)
 
 	return containerID, nil
 }
@@ -99,7 +113,7 @@ func (r *Runner) Start(ctx context.Context, spec ports.RunnerStartSpec, onComple
 // is intentionally allowed (clone, Anthropic API, PR). The --network/--dns flags
 // are emitted only when a runner network is configured; dev/local/CI leave it
 // empty and run unfiltered, exactly as before.
-func buildRunArgs(cfg Config, spec ports.RunnerStartSpec, jobDir string) []string {
+func buildRunArgs(cfg Config, spec ports.RunnerStartSpec, jobDir, secretsDir string) []string {
 	args := []string{"run", "-d",
 		// Isolation hardening: drop all Linux capabilities, forbid privilege
 		// escalation, and cap the process count.
@@ -110,12 +124,14 @@ func buildRunArgs(cfg Config, spec ports.RunnerStartSpec, jobDir string) []strin
 		"-e", "REPO=" + spec.Repo,
 		"-e", "BASE_BRANCH=" + spec.BaseBranch,
 		"-e", "WORK_BRANCH=" + spec.WorkBranch,
-		"-e", "GH_TOKEN=" + spec.GitCreds.Token,
-		"-e", "ANTHROPIC_API_KEY=" + spec.Anthropic.APIKey,
+		// GH_TOKEN / ANTHROPIC_API_KEY are NOT passed as -e (they'd be visible via
+		// docker inspect). They are delivered through the read-only secrets mount
+		// below and read from files by the entrypoint.
 		"-e", "MODEL_OVERRIDE=" + spec.Model,
 		"-e", "SPEC_TYPE=" + string(spec.Spec.Type),
 		"-e", "SPEC_VALUE=" + spec.Spec.Value,
 		"-v", jobDir + ":/workspace",
+		"-v", secretsDir + ":" + secretsMountPath + ":ro",
 	}
 	if cfg.CPUs != "" {
 		args = append(args, "--cpus", cfg.CPUs)
@@ -134,7 +150,7 @@ func buildRunArgs(cfg Config, spec ports.RunnerStartSpec, jobDir string) []strin
 	return args
 }
 
-func (r *Runner) supervise(containerID, jobDir, logPath string, jobID domain.JobID, onComplete func(ports.RunnerResult)) {
+func (r *Runner) supervise(containerID, jobDir, secretsDir, logPath string, jobID domain.JobID, onComplete func(ports.RunnerResult)) {
 	// 1. Wait for the container to finish (bounded by MaxJobDuration), then
 	// stream logs to logPath. If the deadline elapses we kill the container and
 	// fall through with a non-zero exit so the job is marked failed.
@@ -171,10 +187,12 @@ func (r *Runner) supervise(containerID, jobDir, logPath string, jobID domain.Job
 	notifyURL := readTrimmed(filepath.Join(jobDir, ".notification-webhook"))
 	logTail := tailFile(logPath, logTailBytes)
 
-	// 4. Remove the container and its workspace now that we've extracted
-	// everything we need.
+	// 4. Remove the container, its workspace, and its secrets dir now that we've
+	// extracted everything we need (covers the timeout-kill and cancel paths,
+	// since docker kill unblocks the wait above and falls through to here).
 	_ = exec.Command("docker", "rm", "-f", containerID).Run()
 	_ = os.RemoveAll(jobDir)
+	_ = os.RemoveAll(secretsDir)
 
 	res := ports.RunnerResult{
 		JobID:               jobID,
