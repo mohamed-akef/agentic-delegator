@@ -157,6 +157,20 @@ func runServe(cfg *config.Config, db *bun.DB) {
 	if err := reattach.Execute(ctx); err != nil {
 		slog.Error("reattach running jobs", "err", err)
 	}
+	// Best-effort: reap secrets dirs orphaned by jobs that finished while the
+	// orchestrator was down (reattach skips supervise for still-alive jobs, so
+	// their cleanup never ran). Keep only dirs for jobs still genuinely running.
+	if running, err := jobsRepo.ListByStatus(ctx, domain.JobStatusRunning); err != nil {
+		slog.Error("orphan secrets sweep: list running", "err", err)
+	} else {
+		keep := make(map[string]bool, len(running))
+		for _, j := range running {
+			keep[string(j.ID)] = true
+		}
+		if removed := docker.SweepOrphanSecrets(cfg.WorkDirHost, keep); len(removed) > 0 {
+			slog.Info("swept orphan secrets dirs", "count", len(removed))
+		}
+	}
 
 	jobsHandler := adhttp.NewJobsHandler(enqueue, getJob, listJobs, cancelJob)
 	settingsHandler := adhttp.NewSettingsHandler(setAnth, mint, revoke)
