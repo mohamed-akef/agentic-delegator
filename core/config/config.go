@@ -16,6 +16,8 @@ type Config struct {
 	DSN                  string        // Postgres DSN
 	MasterKey            []byte        // 32 bytes, hex-encoded in env
 	RunnerImage          string        // e.g. "agentic-delegator-runner:dev"
+	RunnerNetwork        string        // AGENTIC_RUNNER_NETWORK; "" = no --network (egress filtering off)
+	RunnerDNS            []string      // AGENTIC_RUNNER_DNS; public resolvers, emitted only when RunnerNetwork != ""
 	WorkDirHost          string        // host dir mounted into runners
 	LogDir               string        // private dir (0700) for per-job log files
 	MaxConcurrentPerUser int           // default 3
@@ -42,6 +44,8 @@ func Load() (*Config, error) {
 		HTTPBind:             getEnv("AGENTIC_HTTP_BIND", "127.0.0.1:8787"),
 		DSN:                  getEnv("DELEGATOR_DSN", "postgres://delegator:delegator@127.0.0.1:5433/delegator?sslmode=disable"),
 		RunnerImage:          getEnv("AGENTIC_RUNNER_IMAGE", "agentic-delegator-runner:dev"),
+		RunnerNetwork:        getEnv("AGENTIC_RUNNER_NETWORK", ""),
+		RunnerDNS:            getEnvCSV("AGENTIC_RUNNER_DNS", "1.1.1.1,1.0.0.1"),
 		WorkDirHost:          getEnv("AGENTIC_WORK_DIR", "/tmp/agentic-delegator"),
 		LogDir:               getEnv("AGENTIC_LOG_DIR", ""),
 		MaxConcurrentPerUser: getEnvInt("AGENTIC_MAX_CONCURRENT_PER_USER", 3),
@@ -124,6 +128,23 @@ func getEnvBool(name string, def bool) bool {
 		}
 	}
 	return def
+}
+
+// getEnvCSV splits a comma-separated env var, trims whitespace around each
+// element, and drops empties. def is the comma-separated default used when the
+// var is unset/empty.
+func getEnvCSV(name, def string) []string {
+	v := os.Getenv(name)
+	if v == "" {
+		v = def
+	}
+	var out []string
+	for p := range strings.SplitSeq(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func getEnvInt64(name string, def int64) int64 {

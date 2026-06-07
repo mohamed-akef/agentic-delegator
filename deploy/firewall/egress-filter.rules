@@ -1,0 +1,25 @@
+# Canonical egress-filter rule set for the agentic-delegator runner network.
+# Sourced by runner-egress-firewall.sh (shell array). This file is the single
+# source of truth for which destinations runner egress is DROPped (black-holed)
+# to. See docs/superpowers/specs/2026-06-06-runner-egress-and-secret-isolation-design.md.
+#
+# RFC1918 private + link-local + cloud metadata. The runner subnet
+# (172.31.255.0/24) is itself inside 172.16/12, so the 172.16/12 DROP also
+# isolates runner-to-runner and runner-to-gateway (free L3 isolation between
+# concurrent jobs). The public internet is intentionally NOT dropped — go mod /
+# npm / pip / SPEC_TYPE=url and the Anthropic + GitHub APIs must keep working.
+DROP_CIDRS=(
+  10.0.0.0/8
+  172.16.0.0/12
+  192.168.0.0/16
+  169.254.0.0/16   # cloud metadata (169.254.169.254)
+)
+
+# CGNAT 100.64.0.0/10 is OPTIONAL — some carrier-NAT / cloud setups use it for
+# legitimate endpoints, so it is OFF by default. Uncomment to opt in:
+# DROP_CIDRS+=(100.64.0.0/10)
+
+# IPv6 is disabled on runner-net (no --ipv6), so there is no v6 egress path to
+# police. If you enable IPv6, mirror every DROP with ip6tables for:
+#   fc00::/7   (ULA)
+#   fe80::/10  (link-local)
